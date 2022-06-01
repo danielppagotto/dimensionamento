@@ -25,8 +25,7 @@ dremio_pwd <- Sys.getenv("datalake")
 
 channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
 
-df_sb <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."População por faixa etária selecionada"
- WHERE substr(COD_MUN, 1, 2) = 52')
+df_sb <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."População IBGE por estado e faixa etária selecionada"')
 
 ```
 
@@ -35,10 +34,10 @@ df_sb <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."Popula�
 Para fins de prototipação, vamos pegar só dados de Goiânia. 
 
 ```{r}
+
 a <- df_sb %>%  
-  mutate(COD_MUN = substr(COD_MUN, 1, 6)) %>% 
-  filter(COD_MUN == '520870') %>% 
-  ggplot(aes(x = ANO, y = POPULACAO, col = FAIXA_ETARIA)) + geom_line(size = 1) + 
+  filter(uf == 'GO') %>% 
+  ggplot(aes(x = ano, y = TOTAL, col = FAIXA_ETARIA)) + geom_line(size = 1) + 
   theme_minimal()
 
 plotly::ggplotly(a)
@@ -48,23 +47,10 @@ plotly::ggplotly(a)
 
 De acordo com o caderno de critérios e parâmetros temos algumas previsões sobre a necessidade de procedimentos. A imagem abaixo apresenta tais condições 
 
+![Quadro 1 - procedimentos por faixas etárias](quadro1.PNG)
+![Quadro 2 - procedimentos por faixas etárias](quadro2.PNG)
+![Quadro 3 - procedimentos por faixas etárias](quadro3.PNG)
+![Quadro 4 - procedimentos por faixas etárias](quadro4.PNG)
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
