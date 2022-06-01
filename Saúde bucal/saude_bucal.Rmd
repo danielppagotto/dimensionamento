@@ -7,6 +7,8 @@ output: html_document
 
 ```{r setup, include=FALSE}
 
+options(scipen = 999)
+
 knitr::opts_chunk$set(
 	echo = TRUE,
 	message = FALSE,
@@ -23,7 +25,29 @@ dremio_pwd <- Sys.getenv("datalake")
 
 channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
 
+df_sb <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."População por faixa etária selecionada"
+ WHERE substr(COD_MUN, 1, 2) = 52')
+
 ```
+
+# Prototipação
+
+Para fins de prototipação, vamos pegar só dados de Goiânia. 
+
+```{r}
+a <- df_sb %>%  
+  mutate(COD_MUN = substr(COD_MUN, 1, 6)) %>% 
+  filter(COD_MUN == '520870') %>% 
+  ggplot(aes(x = ANO, y = POPULACAO, col = FAIXA_ETARIA)) + geom_line(size = 1) + 
+  theme_minimal()
+
+plotly::ggplotly(a)
+
+```
+
+
+De acordo com o caderno de critérios e parâmetros temos algumas previsões sobre a necessidade de procedimentos. A imagem abaixo apresenta tais condições 
+
 
 ## R Markdown
 
