@@ -256,6 +256,14 @@ plotly::ggplotly(e)
 ```
 
 
+Uma vez que é uma metodologia que se baseia especialmente na razão população, a estimativa de demanda por serviços de saúde se modifica de acordo com as dinâmicas demográficas. .
+
+
+# Tempo de profissionais 
+
+Uma vez que se sabe o total de serviços necessários para endereçar a população considerando as taxas de coberturas e parâmetros do Ministério da Saúde, é possível determinar o número de horas necessário por profissional e, consequentemente, o total de profissionais em equivalente tempo integral (ETI). 
+
+
 
 
 
