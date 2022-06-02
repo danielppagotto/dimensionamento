@@ -29,6 +29,8 @@ dremio_pwd <- Sys.getenv("datalake")
 
 channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
 
+
+
 ```
 
 # Pressupostos teóricos 
@@ -58,7 +60,8 @@ Para essa metodologia serão necessários dados de população e da cobertura de
 
 df_sb <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."População IBGE por estado e faixa etária selecionada"')
 
-df_cobertura <- read_delim("GitHub/dimensionamento/saude bucal/coberturasb_go.csv", 
+
+df_cobertura <- read_delim("coberturasb_go.csv", 
     ";", escape_double = FALSE, trim_ws = TRUE)
 
 DT::datatable(df_cobertura)
@@ -76,14 +79,18 @@ Para fins de prototipação, vamos pegar só dados de Goiás
 
 a <- df_sb %>%  
   filter(uf == 'GO') %>% 
+  filter(ano >  2019) %>% 
   ggplot(aes(x = ano, y = TOTAL, col = FAIXA_ETARIA)) + geom_line(size = 1) + 
-  theme_minimal()
+  scale_x_continuous(breaks = seq(2020, 2030, 3)) + theme_minimal()
 
 plotly::ggplotly(a)
 
 ```
 
 # Calculando a necessidade em saúde bucal de cada grupo a cada ano 
+
+A cobertura foi estabelecida em 0.24 (24%) visto que, multiplicando-se a taxa de cobertura da eSFSB e o SB2010 (48%), tivemos esse valor aproximado nos últimos cinco anos. No entanto, como dito anteriormente, essa cobertura pode ser ajustada. 
+
 
 ## População de 0 a 14 anos
 ```{r}
@@ -94,11 +101,11 @@ df_sb0_14 <-
   filter(FAIXA_ETARIA == "0 a 14") %>% 
   mutate(cobertura = TOTAL * 0.24) %>% 
   mutate(proced_curativos = 1.5 * cobertura,
-         cobertura_endodontia = 0.8 * cobertura,
+         cobertura_endodontia = 0.08 * cobertura,
          proced_endodontia = 0.1 * cobertura_endodontia) %>% 
   filter(ano > 2019) 
 
-DT::datatable(df_sb0_14)
+DT::datatable(df_sb0_14 %>% select(-starts_with("cobertura")))
 
 ```
 
@@ -111,7 +118,8 @@ b <- df_sb0_14 %>%
                names_to = "procedimento",
                values_to = "total",
                ) %>% 
-  ggplot(aes(x = ano, y = total, fill = procedimento)) + geom_col() + 
+  ggplot(aes(x = ano, y = total, col = procedimento)) + geom_line() + 
+  facet_wrap(~procedimento, scales = "free_y") +   scale_x_continuous(breaks = seq(2020, 2030, 3)) + 
   theme_minimal()
 
 
@@ -119,6 +127,142 @@ plotly::ggplotly(b)
 
 
 ```
+
+
+## População de 15 a 29 anos
+```{r}
+
+df_sb15_29 <- 
+  df_sb %>% 
+  filter(uf == 'GO') %>% 
+  filter(FAIXA_ETARIA == "15 a 29") %>% 
+  mutate(cobertura = TOTAL * 0.24) %>% 
+  mutate(proced_curativos = 2.6 * cobertura,
+         cobertura_periodontia = 0.101 * cobertura,
+         proced_periodontia = 0.10 * cobertura_periodontia, 
+         cobertura_cirurgia = 0.099 * cobertura,
+         proced_cirurgia = 0.20 * cobertura_cirurgia,
+         cobertura_endodontia = 0.1 * cobertura,
+         proced_endodontia = 0.1 * cobertura_endodontia,
+         cobertura_protese = 0.137 * cobertura,
+         proced_protese = 0.027 * cobertura_protese) %>% 
+  filter(ano > 2019) 
+
+DT::datatable(df_sb15_29 %>% select(-starts_with("cobertura")))
+
+```
+
+```{r}
+
+c <- df_sb15_29 %>% 
+  select(-uf, -FAIXA_ETARIA, -cobertura, -TOTAL, -cobertura_endodontia) %>% 
+  pivot_longer(
+               cols = starts_with("proced"),
+               names_to = "procedimento",
+               values_to = "total",
+               ) %>% 
+  ggplot(aes(x = ano, y = total, col = procedimento)) + geom_line() + 
+  theme_minimal() + facet_wrap(~procedimento, scales = "free_y") + 
+  scale_x_continuous(breaks = seq(2020, 2030, 3))
+
+
+plotly::ggplotly(c)
+
+
+```
+
+
+## População de 30 a 59 anos
+```{r}
+
+df_sb30_59 <- 
+  df_sb %>% 
+  filter(uf == 'GO') %>% 
+  filter(FAIXA_ETARIA == "30 a 59") %>% 
+  mutate(cobertura = TOTAL * 0.24) %>% 
+  mutate(proced_curativos = 4.1 * cobertura,
+         cobertura_periodontia = 0.179 * cobertura,
+         proced_periodontia = 0.12 * cobertura_periodontia, 
+         cobertura_cirurgia = 0.164 * cobertura,
+         proced_cirurgia = 0.32 * cobertura_cirurgia,
+         cobertura_endodontia = 0.10 * cobertura,
+         proced_endodontia = 0.11 * cobertura_endodontia,
+         cobertura_protese = 0.687 * cobertura,
+         proced_protese = 0.138 * cobertura_protese) %>% 
+  filter(ano > 2019) 
+
+DT::datatable(df_sb30_59 %>% select(-starts_with("cobertura")))
+
+```
+
+```{r}
+
+d <- df_sb30_59 %>% 
+  select(-uf, -FAIXA_ETARIA, -cobertura, -TOTAL, -cobertura_endodontia) %>% 
+  pivot_longer(
+               cols = starts_with("proced"),
+               names_to = "procedimento",
+               values_to = "total",
+               ) %>% 
+  ggplot(aes(x = ano, y = total, col = procedimento)) + geom_line() + 
+  theme_minimal() + facet_wrap(~procedimento, scales = "free_y") + 
+  scale_x_continuous(breaks = seq(2020, 2030, 3))
+
+
+plotly::ggplotly(d)
+
+
+```
+
+## População acima de 60 anos
+
+```{r}
+
+df_sb60 <- 
+  df_sb %>% 
+  filter(uf == 'GO') %>% 
+  filter(FAIXA_ETARIA == "30 a 59") %>% 
+  mutate(cobertura = TOTAL * 0.24) %>% 
+  mutate(proced_curativos = 1.64 * cobertura,
+         cobertura_periodontia = 0.039 * cobertura,
+         proced_periodontia = 0.04 * cobertura_periodontia, 
+         cobertura_cirurgia = 0.107 * cobertura,
+         proced_cirurgia = 0.23 * cobertura_cirurgia,
+         cobertura_protese = 0.927 * cobertura,
+         proced_protese = 0.185 * cobertura_protese) %>% 
+  filter(ano > 2019) 
+
+DT::datatable(df_sb60 %>% select(-starts_with("cobertura")))
+
+```
+
+```{r}
+
+e <- df_sb60 %>% 
+  select(-uf, -FAIXA_ETARIA, -cobertura, -TOTAL) %>% 
+  pivot_longer(
+               cols = starts_with("proced"),
+               names_to = "procedimento",
+               values_to = "total",
+               ) %>% 
+  ggplot(aes(x = ano, y = total, col = procedimento)) + geom_line() + 
+  theme_minimal() + facet_wrap(~procedimento, scales = "free_y") + 
+  scale_x_continuous(breaks = seq(2020, 2030, 3))
+
+
+plotly::ggplotly(e)
+
+
+```
+
+
+
+
+
+
+
+
+
 
 
 
