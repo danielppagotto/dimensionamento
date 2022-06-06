@@ -10,21 +10,47 @@ knitr::opts_chunk$set(echo = TRUE)
 
 setwd("~/GitHub/dimensionamento/Agravos do SINAN/Animais peçonhentos")
 
+library(tidyverse)
+library(lubridate)
+
+
+
+
 ```
 
 
 ```{r cars, message=FALSE, warning=FALSE}
 
+
 animais <- read.dbc::read.dbc("ANIMBR21.dbc")
 
-animais %>%  
-  mutate(faixa_etaria = case_when(NU_IDADE_N < 4000 ~ "Menor que 1 ano",
-                                  NU_IDADE_N > 4000 & NU_IDADE_N < 4005 ~ "Entre 1 e 4 anos",
-                                  ))
+base_animais <- animais %>%  
+    mutate(faixa_etaria = case_when(NU_IDADE_N < 4000 ~ "Menor que 1 ano",
+                                    NU_IDADE_N >= 4000 & NU_IDADE_N < 4005 ~ "Entre 1 e 4 anos",
+                                    NU_IDADE_N >= 4005 & NU_IDADE_N < 4015 ~ "Entre 5 e 14 anos",
+                                    NU_IDADE_N >= 4015 & NU_IDADE_N < 4025 ~ "Entre 15 e 24 anos", 
+                                    NU_IDADE_N >= 4025 & NU_IDADE_N < 4035 ~ "Entre 25 e 34 anos", 
+                                    NU_IDADE_N >= 4035 & NU_IDADE_N < 4045 ~ "Entre 35 e 44 anos", 
+                                    NU_IDADE_N >= 4045 & NU_IDADE_N < 4055 ~ "Entre 45 e 54 anos", 
+                                    NU_IDADE_N >= 4055 & NU_IDADE_N < 4065 ~ "Entre 55 e 64 anos", 
+                                    NU_IDADE_N >= 4065 ~ "65 ou mais ")) %>%
+    mutate(tipo_animais = case_when(TP_ACIDENT == 1 ~ "Serpente",
+                                    TP_ACIDENT == 2 ~ "Aranha", 
+                                    TP_ACIDENT == 3 ~ "Escorpião",
+                                    TP_ACIDENT == 4 ~ "Lagarta", 
+                                    TP_ACIDENT == 5 ~ "Abelha", 
+                                    TP_ACIDENT == 6 ~ "Outros",
+                                    TP_ACIDENT == 9 ~ " Ignorado" ))%>%
+    mutate(gravidade = case_when(TRA_CLASSI == 1 ~ "Leve", 
+                                 TRA_CLASSI == 2 ~ "Moderado", 
+                                 TRA_CLASSI == 3 ~ "Grave", 
+                                 TRA_CLASSI == 9 ~ "Ignorado")) %>% 
+    mutate(mes_ano = ymd(DT_NOTIFIC),
+           mes_ano = format_ISO8601(mes_ano, precision = "ym"),
+           mes_ano = ym(mes_ano))
 
-#writexl::write_xlsx(animais_red, "animais.xlsx")
 
-DT::datatable(animais_red)
+glimpse(base_animais)
 
 ```
 # **Análise de incidentes por município**
@@ -32,12 +58,27 @@ DT::datatable(animais_red)
 ### Tipo de animal 
 
 ```{r}
-qtd_serpente <- 
-  animais %>% 
-  filter(ANI_SERPEN != "NA") %>% 
-  group_by(ID_MN_RESI, faixa_etaria, DT_NOTIFIC) 
+
+tipo_animal <- c("Serpente", "Aranha", "Escorpião", "Lagarta", "Abelha")
+
+funcao_propria <- function(tipo_animal){
+
+  base_animais %>% 
+    filter(tipo_animais == tipo_animal) %>% 
+    group_by(tipo_animais, ID_MN_RESI, faixa_etaria, mes_ano)%>%
+    count(faixa_etaria)
+
+}
+
+bases <- tibble()
+
+
+for (animal in tipo_animal){
   
-  
+  intermed <- funcao_propria(tipo_animal = animal)
+  bases <- rbind(intermed, bases)
+}
+
 ```
 
 

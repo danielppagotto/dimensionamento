@@ -101,7 +101,7 @@ df_sb0_14 <-
   filter(FAIXA_ETARIA == "0 a 14") %>% 
   mutate(cobertura = TOTAL * 0.24) %>% 
   mutate(proced_curativos = 1.5 * cobertura,
-         cobertura_endodontia = 0.08 * cobertura,
+         cobertura_endodontia = 0.08 * TOTAL,
          proced_endodontia = 0.1 * cobertura_endodontia) %>% 
   filter(ano > 2019) 
 
@@ -138,13 +138,13 @@ df_sb15_29 <-
   filter(FAIXA_ETARIA == "15 a 29") %>% 
   mutate(cobertura = TOTAL * 0.24) %>% 
   mutate(proced_curativos = 2.6 * cobertura,
-         cobertura_periodontia = 0.101 * cobertura,
+         cobertura_periodontia = 0.101 * TOTAL,
          proced_periodontia = 0.10 * cobertura_periodontia, 
-         cobertura_cirurgia = 0.099 * cobertura,
+         cobertura_cirurgia = 0.099 * TOTAL,
          proced_cirurgia = 0.20 * cobertura_cirurgia,
-         cobertura_endodontia = 0.1 * cobertura,
+         cobertura_endodontia = 0.1 * TOTAL,
          proced_endodontia = 0.1 * cobertura_endodontia,
-         cobertura_protese = 0.137 * cobertura,
+         cobertura_protese = 0.137 * TOTAL,
          proced_protese = 0.027 * cobertura_protese) %>% 
   filter(ano > 2019) 
 
@@ -181,13 +181,13 @@ df_sb30_59 <-
   filter(FAIXA_ETARIA == "30 a 59") %>% 
   mutate(cobertura = TOTAL * 0.24) %>% 
   mutate(proced_curativos = 4.1 * cobertura,
-         cobertura_periodontia = 0.179 * cobertura,
+         cobertura_periodontia = 0.179 * TOTAL,
          proced_periodontia = 0.12 * cobertura_periodontia, 
-         cobertura_cirurgia = 0.164 * cobertura,
+         cobertura_cirurgia = 0.164 * TOTAL,
          proced_cirurgia = 0.32 * cobertura_cirurgia,
-         cobertura_endodontia = 0.10 * cobertura,
+         cobertura_endodontia = 0.10 * TOTAL,
          proced_endodontia = 0.11 * cobertura_endodontia,
-         cobertura_protese = 0.687 * cobertura,
+         cobertura_protese = 0.687 * TOTAL,
          proced_protese = 0.138 * cobertura_protese) %>% 
   filter(ano > 2019) 
 
@@ -221,14 +221,14 @@ plotly::ggplotly(d)
 df_sb60 <- 
   df_sb %>% 
   filter(uf == 'GO') %>% 
-  filter(FAIXA_ETARIA == "30 a 59") %>% 
+  filter(FAIXA_ETARIA == "60 ou mais") %>% 
   mutate(cobertura = TOTAL * 0.24) %>% 
   mutate(proced_curativos = 1.64 * cobertura,
-         cobertura_periodontia = 0.039 * cobertura,
+         cobertura_periodontia = 0.039 * TOTAL,
          proced_periodontia = 0.04 * cobertura_periodontia, 
-         cobertura_cirurgia = 0.107 * cobertura,
+         cobertura_cirurgia = 0.107 * TOTAL,
          proced_cirurgia = 0.23 * cobertura_cirurgia,
-         cobertura_protese = 0.927 * cobertura,
+         cobertura_protese = 0.927 * TOTAL,
          proced_protese = 0.185 * cobertura_protese) %>% 
   filter(ano > 2019) 
 
@@ -257,6 +257,62 @@ plotly::ggplotly(e)
 
 
 Uma vez que é uma metodologia que se baseia especialmente na razão população, a estimativa de demanda por serviços de saúde se modifica de acordo com as dinâmicas demográficas. .
+
+
+```{r}
+
+df_sb60t <- df_sb60 %>% 
+  select(-uf, FAIXA_ETARIA, -starts_with("cobertura"), -TOTAL) %>% 
+  pivot_longer(
+               cols = starts_with("proced"),
+               names_to = "procedimento",
+               values_to = "total",
+               )
+
+df_sb0_14t <- df_sb0_14 %>% 
+  select(-uf, FAIXA_ETARIA, -starts_with("cobertura"), -TOTAL) %>% 
+  pivot_longer(
+               cols = starts_with("proced"),
+               names_to = "procedimento",
+               values_to = "total",
+               )
+
+df_sb30_59t <- df_sb30_59%>% 
+  select(-uf, FAIXA_ETARIA, -starts_with("cobertura"), -TOTAL) %>% 
+  pivot_longer(
+               cols = starts_with("proced"),
+               names_to = "procedimento",
+               values_to = "total",
+               )
+
+df_sb15_29t <- df_sb15_29 %>% 
+  select(-uf, FAIXA_ETARIA, -starts_with("cobertura"), -TOTAL) %>% 
+  pivot_longer(
+               cols = starts_with("proced"),
+               names_to = "procedimento",
+               values_to = "total",
+               )
+
+df_total <- 
+  rbind(df_sb0_14t, df_sb15_29t,
+        df_sb30_59t, df_sb60t)
+
+
+f <- df_total %>%  
+  filter(ano == 2020) %>% 
+  ggplot(aes(x = procedimento, y = total, fill = FAIXA_ETARIA)) + geom_col(position = "dodge") + 
+  coord_flip() + theme_minimal()
+
+plotly::ggplotly(f)
+
+```
+
+Procedimentos 
+
+```{r}
+DT::datatable(df_total)
+```
+
 
 
 # Tempo de profissionais 
