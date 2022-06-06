@@ -12,15 +12,24 @@ setwd("~/GitHub/dimensionamento/Agravos do SINAN/Animais peçonhentos")
 
 library(tidyverse)
 library(lubridate)
+library(RODBC)
 
+dremio_host <- "200.137.215.27"
+dremio_port <- "31010"
+dremio_uid <- "daniel"
+dremio_pwd <- Sys.getenv("datalake")
 
-
+channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
 
 ```
 
 
 ```{r cars, message=FALSE, warning=FALSE}
 
+df_territorial <- sqlQuery(channel, 
+                           'SELECT * FROM "Analytics Layer".Territorial."Municípios - Hierarquia Completa"')
+
+df_territorial$cod_municipio <- as.character(df_territorial$cod_municipio)
 
 animais <- read.dbc::read.dbc("ANIMBR21.dbc")
 
@@ -47,10 +56,8 @@ base_animais <- animais %>%
                                  TRA_CLASSI == 9 ~ "Ignorado")) %>% 
     mutate(mes_ano = ymd(DT_NOTIFIC),
            mes_ano = format_ISO8601(mes_ano, precision = "ym"),
-           mes_ano = ym(mes_ano))
-
-
-glimpse(base_animais)
+           mes_ano = ym(mes_ano)) %>% 
+    left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
 
 ```
 # **Análise de incidentes por município**
@@ -65,8 +72,8 @@ funcao_propria <- function(tipo_animal){
 
   base_animais %>% 
     filter(tipo_animais == tipo_animal) %>% 
-    group_by(tipo_animais, ID_MN_RESI, faixa_etaria, mes_ano)%>%
-    count(faixa_etaria)
+    group_by(tipo_animais, uf, mes_ano)%>%
+    summarise(total = n())
 
 }
 
@@ -80,6 +87,20 @@ for (animal in tipo_animal){
 }
 
 ```
+
+Pegando o estado de Goiás como referência
+
+```{r}
+
+a <- bases %>% 
+  filter(uf == "Goiás") %>% 
+  ggplot(aes(x = mes_ano, y = total, col = tipo_animais)) + geom_line() +
+  theme_minimal() + ggtitle("Número de incidentes com animais peçonhentos em Goiás (SINAN - 2021)")
+
+plotly::ggplotly(a)
+
+```
+
 
 
 ### Por classificação 
