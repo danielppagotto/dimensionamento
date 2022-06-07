@@ -84,7 +84,7 @@ for (animal in tipo_animal){
 
 ```
 
-Pegando o estado de Goiás como referência
+Pegando o estado de Goiás como referência. Observa-se que o número de incidentes ocasionados por picada de escorpião foi maior que os demais animais peçonhentos. 
 
 ```{r}
 
@@ -96,6 +96,7 @@ a <- bases %>%
 plotly::ggplotly(a)
 
 ```
+
 
 
 
