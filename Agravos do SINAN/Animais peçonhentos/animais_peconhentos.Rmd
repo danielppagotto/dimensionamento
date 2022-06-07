@@ -22,7 +22,10 @@ df_territorial <- read.csv("https://raw.githubusercontent.com/danielppagotto/dim
 
 df_territorial$cod_municipio <- as.character(df_territorial$cod_municipio)
 
-animais_t <- arrow::read_parquet("animais.parquet")
+animais_t <- read.csv("https://github.com/danielppagotto/dimensionamento/blob/main/Agravos%20do%20SINAN/Animais%20pe%C3%A7onhentos/animais.csv?raw=true")
+
+df_territorial$cod_municipio <- as.character(df_territorial$cod_municipio)
+
 # comentário
 
 base_animais <- animais %>%  
@@ -65,7 +68,7 @@ funcao_propria <- function(tipo_animal){
 
   base_animais %>% 
     filter(tipo_animais == tipo_animal) %>% 
-    group_by(tipo_animais, uf, mes_ano)%>%
+    group_by(tipo_animais, uf, mes_ano) %>%
     summarise(total = n())
 
 }
