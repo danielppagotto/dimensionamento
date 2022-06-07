@@ -22,7 +22,8 @@ df_territorial <- read.csv("https://raw.githubusercontent.com/danielppagotto/dim
 
 df_territorial$cod_municipio <- as.character(df_territorial$cod_municipio)
 
-animais <- read.dbc::read.dbc("ANIMBR21.dbc")
+animais_t <- arrow::read_parquet("animais.parquet")
+
 
 base_animais <- animais %>%  
     mutate(faixa_etaria = case_when(NU_IDADE_N < 4000 ~ "Menor que 1 ano",
