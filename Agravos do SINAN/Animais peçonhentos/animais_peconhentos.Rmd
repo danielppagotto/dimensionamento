@@ -12,22 +12,13 @@ setwd("~/GitHub/dimensionamento/Agravos do SINAN/Animais peçonhentos")
 
 library(tidyverse)
 library(lubridate)
-library(RODBC)
-
-dremio_host <- "200.137.215.27"
-dremio_port <- "31010"
-dremio_uid <- "daniel"
-dremio_pwd <- Sys.getenv("datalake")
-
-channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
 
 ```
 
 
 ```{r cars, message=FALSE, warning=FALSE}
 
-df_territorial <- sqlQuery(channel, 
-                           'SELECT * FROM "Analytics Layer".Territorial."Municípios - Hierarquia Completa"')
+df_territorial <- read.csv("https://raw.githubusercontent.com/danielppagotto/dimensionamento/main/Agravos%20do%20SINAN/Animais%20pe%C3%A7onhentos/df_territorial.csv")
 
 df_territorial$cod_municipio <- as.character(df_territorial$cod_municipio)
 
@@ -146,3 +137,5 @@ plot(pressure)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
