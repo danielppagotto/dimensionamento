@@ -72,7 +72,7 @@ mutate(classif = case_when(CLASSI_FIN == 1 ~ "Intoxicação Confirmada",
 
 # **Análise de incidentes por município**
 
-### Tipo de animal
+### Tipo de intoxicação
 
 ```{r pressure, echo=FALSE}
 plot(pressure)
