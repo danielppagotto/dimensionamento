@@ -1,0 +1,148 @@
+---
+title: "antirabica"
+author: "adaleny paiva"
+date: '2022-06-08'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("~/GitHub/dimensionamento/Agravos do SINAN/Antirabica")
+
+library(tidyverse)
+library(lubridate)
+library(read.dbc)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+
+animais_antira <- read.dbc::read.dbc("ANTRBR21.dbc")
+
+df_territorial <- read.csv("https://raw.githubusercontent.com/danielppagotto/dimensionamento/main/Agravos%20do%20SINAN/Animais%20pe%C3%A7onhentos/df_territorial.csv")
+
+df_territorial$cod_municipio <- as.character(df_territorial$cod_municipio)
+
+
+base_animais_antira <-animais_antira %>%  
+mutate(faixa_etaria = case_when(NU_IDADE_N < 4000 ~ "Menor que 1 ano",
+                                NU_IDADE_N >= 4000 & NU_IDADE_N < 4005 ~ "Entre 1 e 4 anos",                                   NU_IDADE_N >= 4005 & NU_IDADE_N < 4015 ~ "Entre 5 e 14 anos",                                   NU_IDADE_N >= 4015 & NU_IDADE_N < 4025 ~ "Entre 15 e 24 anos", 
+                                NU_IDADE_N >= 4025 & NU_IDADE_N < 4035 ~ "Entre 25 e 34 anos", 
+                                NU_IDADE_N >= 4035 & NU_IDADE_N < 4045 ~ "Entre 35 e 44 anos", 
+                                NU_IDADE_N >= 4045 & NU_IDADE_N < 4055 ~ "Entre 45 e 54 anos", 
+                                NU_IDADE_N >= 4055 & NU_IDADE_N < 4065 ~ "Entre 55 e 64 anos", 
+                                NU_IDADE_N >= 4065 ~ "65 ou mais "))%>%
+mutate(tipo_animais = case_when(ANIMAL == 1 ~ "Canina",
+                                ANIMAL == 2 ~ "Felina", 
+                                ANIMAL == 3 ~ "Quiróptera (morcego)",
+                                ANIMAL == 4 ~ "Primata (macaco)", 
+                                ANIMAL == 5 ~ "Raposa", 
+                                ANIMAL == 6 ~ "Herbívoro doméstico(especificar)",
+                                ANIMAL == 7 ~ "Outros" ))%>%
+mutate(ferimento = case_when(FERIMENTO == 1 ~ "Ùnico", 
+                             FERIMENTO == 2 ~ "Múltiplo", 
+                             FERIMENTO == 3 ~ "Sem ferimento", 
+                             FERIMENTO == 9 ~ "Ignorado"))%>%
+  mutate(mes_ano = ymd(DT_NOTIFIC),
+           mes_ano = format_ISO8601(mes_ano, precision = "ym"),
+           mes_ano = ym(mes_ano)) %>% 
+    left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
+
+glimpse(base_animais_antira)
+
+
+```
+
+# **Análise de incidentes por município**
+
+### Tipo de animal
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+
+
+tipo_animal_antira <- c("Canina", "Felina", "Quiróptera (morcego)", "Primata (macaco)", "Raposa", "Herbívoro doméstico(especificar)")
+
+funcao_propria <- function(tipo_animal_antira){
+
+  base_animais_antira %>% 
+    filter(tipo_animais == tipo_animal_antira) %>% 
+    group_by(tipo_animais, uf, mes_ano) %>%
+    summarise(total = n())
+
+}
+
+bases <- tibble()
+
+
+for (animal in tipo_animal_antira){
+  
+  intermed <- funcao_propria(tipo_animal_antira = animal)
+  bases <- rbind(intermed, bases)
+}
+
+
+
+
+```
+
+Pegando o estado de Goiás como referência
+
+```{r}
+
+a <- bases %>% 
+  filter(uf == "Goiás") %>% 
+  ggplot(aes(x = mes_ano, y = total, col = tipo_animais)) + geom_line() +
+  theme_minimal() + ggtitle("Número de incidentes por mordeduras em Goiás (SINAN - 2021)")
+
+plotly::ggplotly(a)
+
+```
+
+# Por classifição
+```{r}
+tipo_classif_antira <- c("Único", "Múltiplo", "Sem ferimento")
+
+funcao_propria <- function(tipo_classif_antira){
+
+  base_animais_antira %>% 
+    filter(ferimento == tipo_classif_antira) %>% 
+    group_by(tipo_animais, uf, mes_ano, ferimento) %>%
+    summarise(total = n())
+
+}
+
+bases_classif <- tibble()
+
+
+for (animal_class in tipo_classif_antira){
+  
+  intermed <- funcao_propria(tipo_classif_antira = animal_class)
+  bases_classif <- rbind(intermed, bases_classif)
+}
+```
+
+
+```{r}
+
+
+b <- bases_classif %>% 
+  filter(uf == "Goiás") %>% 
+  ggplot(aes(x = mes_ano, y = total, col = ferimento)) + geom_line() +
+  scale_y_continuous(breaks = seq(1, 10, 2)) + theme_minimal()+ ggtitle("Número de agravos por mordeduras em Goiás (SINAN - 2021)")
+
+
+plotly::ggplotly(b)
+
+
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
