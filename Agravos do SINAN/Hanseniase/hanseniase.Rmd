@@ -1,0 +1,93 @@
+---
+title: "hanseniase"
+author: "adaleny paiva"
+date: '2022-06-08'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("~/GitHub/dimensionamento/Agravos do SINAN/Hanseniase")
+
+library(tidyverse)
+library(lubridate)
+library(read.dbc)
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+
+Hanseniase <- read.dbc::read.dbc("HANSBR22.dbc")
+
+df_territorial <- read.csv("https://raw.githubusercontent.com/danielppagotto/dimensionamento/main/Agravos%20do%20SINAN/Animais%20pe%C3%A7onhentos/df_territorial.csv")
+
+df_territorial$cod_municipio <- as.character(df_territorial$cod_municipio)
+
+
+base_hans <- Hanseniase %>%  
+mutate(faixa_etaria = case_when(NU_IDADE_N < 4000 ~ "Menor que 1 ano",
+                                NU_IDADE_N >= 4000 & NU_IDADE_N < 4005 ~ "Entre 1 e 4 anos",                                   NU_IDADE_N >= 4005 & NU_IDADE_N < 4015 ~ "Entre 5 e 14 anos",                                   NU_IDADE_N >= 4015 & NU_IDADE_N < 4025 ~ "Entre 15 e 24 anos", 
+                                NU_IDADE_N >= 4025 & NU_IDADE_N < 4035 ~ "Entre 25 e 34 anos", 
+                                NU_IDADE_N >= 4035 & NU_IDADE_N < 4045 ~ "Entre 35 e 44 anos", 
+                                NU_IDADE_N >= 4045 & NU_IDADE_N < 4055 ~ "Entre 45 e 54 anos", 
+                                NU_IDADE_N >= 4055 & NU_IDADE_N < 4065 ~ "Entre 55 e 64 anos", 
+                                NU_IDADE_N >= 4065 ~ "65 ou mais "))%>%
+mutate(formas_clinicas = case_when(FORMACLINI == "01" ~ "I -Indeterminada",
+                              FORMACLINI == "02" ~ "T - Tuberculóide", 
+                              FORMACLINI == "03" ~ "D - Dimorfa",
+                              FORMACLINI == "04" ~ "V - Virchowiana", 
+                              FORMACLINI == "05" ~ "Não classificado" ))%>%
+mutate(classif_op = case_when(CLASSOPERA == 1 ~ "PB - Paucibacilar", 
+                           CLASSOPERA == 2 ~ "MB - Multibacilar"))%>%
+  mutate(mes_ano = ymd(DT_NOTIFIC),
+           mes_ano = format_ISO8601(mes_ano, precision = "ym"),
+           mes_ano = ym(mes_ano)) %>% 
+    left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
+
+
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+
+
+forma_clinica <- c("Medicamento", "Planta tóxica")
+
+funcao_propria <- function(forma_clinica){
+
+  base_hans %>% 
+    filter(formas_clinicas == forma_clinica) %>% 
+    group_by(formas_clinicas, uf, mes_ano) %>%
+    summarise(total = n())
+
+}
+
+bases <- tibble()
+
+
+for (form_clin in forma_clinica){
+  
+  intermed <- funcao_propria(forma_clinica = form_clin)
+  bases <- rbind(intermed, bases)
+}
+
+
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
