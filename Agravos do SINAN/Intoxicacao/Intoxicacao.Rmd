@@ -68,9 +68,6 @@ mutate(classif = case_when(CLASSI_FIN == 1 ~ "Intoxicação Confirmada",
     left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
 
 
-
-
-
 ```
 
 # **Análise de incidentes por município**
@@ -103,6 +100,9 @@ for (intox in tipo_intox){
 
 
 ```
+
+Em abril, aparece uma queda muito abrupta de casos com medicamentos, aparecendo somente 1. Como os meses anteriores apresentam mais de 100, precisamos verificar se existe algum erro. 
+
 
 
 ```{r}
@@ -141,12 +141,13 @@ for (intox_class in tipo_classif_intox){
 
 
 
+
 ```{r}
 
 
 b <- bases_classif %>% 
   filter(uf == "Goiás") %>% 
-  ggplot(aes(x = mes_ano, y = total, col = ferimento)) + geom_line() + theme_minimal()+ ggtitle("Número de agravos por mordeduras em Goiás (SINAN - 2021)")
+  ggplot(aes(x = mes_ano, y = total, col = classif)) + geom_line() + theme_minimal()+ ggtitle("Número de agravos por mordeduras em Goiás (SINAN - 2021)")
 
 
 plotly::ggplotly(b)
