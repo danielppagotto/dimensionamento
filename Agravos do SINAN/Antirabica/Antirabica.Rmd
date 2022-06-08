@@ -107,7 +107,7 @@ plotly::ggplotly(a)
 
 # Por classifição
 ```{r}
-tipo_classif_antira <- c("Único", "Múltiplo", "Sem ferimento")
+tipo_classif_antira <- c("Ùnico", "Múltiplo", "Sem ferimento")
 
 funcao_propria <- function(tipo_classif_antira){
 
