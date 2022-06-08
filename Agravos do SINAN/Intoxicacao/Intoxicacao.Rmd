@@ -123,8 +123,8 @@ tipo_classif_intox<- c("Intoxicação Confirmada", "Exposição", "Reação adve
 funcao_propria <- function(tipo_classif_intox){
 
   base_intox %>% 
-    filter(ferimento == tipo_classif_intox) %>% 
-    group_by(tipos_intox, uf, mes_ano, classif) %>%
+    filter(classif == tipo_classif_intox) %>% 
+    group_by(classif, uf, mes_ano) %>%
     summarise(total = n())
 
 }
@@ -144,13 +144,12 @@ for (intox_class in tipo_classif_intox){
 ```{r}
 
 
-a <- bases_classif %>% 
+b <- bases_classif %>% 
   filter(uf == "Goiás") %>% 
-  ggplot(aes(x = mes_ano, y = total, col = ferimento)) + geom_line() +
-  scale_y_continuous(breaks = seq(1, 10, 2)) + theme_minimal()+ ggtitle("Número de agravos por mordeduras em Goiás (SINAN - 2021)")
+  ggplot(aes(x = mes_ano, y = total, col = ferimento)) + geom_line() + theme_minimal()+ ggtitle("Número de agravos por mordeduras em Goiás (SINAN - 2021)")
 
 
-plotly::ggplotly(a)
+plotly::ggplotly(b)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
