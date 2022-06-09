@@ -52,7 +52,7 @@ mutate(diagnosticos = case_when(CLASSI_FIN == 5 ~ "Descartado",
            mes_ano = ym(mes_ano)) %>% 
     left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
 
-glimpse(base_dengue)
+glimpse(base_dengue$diagnosticos)
 
 
 
