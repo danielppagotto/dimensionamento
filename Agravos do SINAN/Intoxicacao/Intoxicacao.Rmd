@@ -1,0 +1,159 @@
+---
+title: "intoxicação"
+author: "adaleny paiva"
+date: '2022-06-08'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("~/GitHub/dimensionamento/Agravos do SINAN/Intoxicacao")
+
+library(tidyverse)
+library(lubridate)
+library(read.dbc)
+
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+
+intoxicacao <- read.dbc::read.dbc("IEXOBR22.dbc")
+
+df_territorial <- read.csv("https://raw.githubusercontent.com/danielppagotto/dimensionamento/main/Agravos%20do%20SINAN/Animais%20pe%C3%A7onhentos/df_territorial.csv")
+
+df_territorial$cod_municipio <- as.character(df_territorial$cod_municipio)
+
+
+base_intox <- intoxicacao %>%  
+mutate(faixa_etaria = case_when(NU_IDADE_N < 4000 ~ "Menor que 1 ano",
+                                NU_IDADE_N >= 4000 & NU_IDADE_N < 4005 ~ "Entre 1 e 4 anos",                                   NU_IDADE_N >= 4005 & NU_IDADE_N < 4015 ~ "Entre 5 e 14 anos",                                   NU_IDADE_N >= 4015 & NU_IDADE_N < 4025 ~ "Entre 15 e 24 anos", 
+                                NU_IDADE_N >= 4025 & NU_IDADE_N < 4035 ~ "Entre 25 e 34 anos", 
+                                NU_IDADE_N >= 4035 & NU_IDADE_N < 4045 ~ "Entre 35 e 44 anos", 
+                                NU_IDADE_N >= 4045 & NU_IDADE_N < 4055 ~ "Entre 45 e 54 anos", 
+                                NU_IDADE_N >= 4055 & NU_IDADE_N < 4065 ~ "Entre 55 e 64 anos", 
+                                NU_IDADE_N >= 4065 ~ "65 ou mais "))%>%
+mutate(tipos_intox = case_when(AGENTE_TOX == "01" ~ "Medicamento",
+                              AGENTE_TOX == "02" ~ "Agrotóxico/uso agrícola", 
+                              AGENTE_TOX == "03" ~ "Agrotóxico/uso doméstico",
+                              AGENTE_TOX == "04" ~ "Agrotóxico/uso saúde pública", 
+                              AGENTE_TOX == "05" ~ "Raticida", 
+                              AGENTE_TOX == "06" ~ "Produto Veterinário",
+                              AGENTE_TOX == "07" ~ "Produto de uso domiciliar",
+                              AGENTE_TOX == "08" ~ "Cosmético / higiene pessoal",
+                              AGENTE_TOX == "09" ~ "Produto químico de uso industrial",
+                              AGENTE_TOX == "10" ~ "Metal",
+                              AGENTE_TOX == "11" ~ "Drogas de abuso",
+                              AGENTE_TOX == "12" ~ "Planta tóxica",
+                              AGENTE_TOX == "13" ~ "Alimento e bebida",
+                              AGENTE_TOX == "14" ~ "Outro",
+                              AGENTE_TOX == "99" ~ "Ignorado"))%>%
+mutate(classif = case_when(CLASSI_FIN == 1 ~ "Intoxicação Confirmada", 
+                           CLASSI_FIN == 2 ~ "Exposição", 
+                           CLASSI_FIN == 3 ~ "Reação adversa",
+                           CLASSI_FIN == 4 ~ "Diagnóstico diferencial",
+                           CLASSI_FIN == 5 ~ "Síndrome de abstinência",
+                           CLASSI_FIN == 9 ~ "Ignorado"))%>%
+  mutate(mes_ano = ymd(DT_NOTIFIC),
+           mes_ano = format_ISO8601(mes_ano, precision = "ym"),
+           mes_ano = ym(mes_ano)) %>% 
+    left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
+
+
+
+
+
+```
+
+# **Análise de incidentes por município**
+
+### Tipo de intoxicação
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+
+
+tipo_intox<- c("Medicamento", "Planta tóxica")
+
+funcao_propria <- function(tipo_intox){
+
+  base_intox %>% 
+    filter(tipos_intox == tipo_intox) %>% 
+    group_by(tipos_intox, uf, mes_ano) %>%
+    summarise(total = n())
+
+}
+
+bases <- tibble()
+
+
+for (intox in tipo_intox){
+  
+  intermed <- funcao_propria(tipo_intox = intox)
+  bases <- rbind(intermed, bases)
+}
+
+
+```
+
+Em abril, aparece uma queda muito abrupta de casos com medicamentos, aparecendo somente 1. Como os meses anteriores apresentam mais de 100, precisamos verificar se existe algum erro. 
+
+
+
+```{r}
+
+a <- bases %>% 
+  filter(uf == "Goiás") %>% 
+  ggplot(aes(x = mes_ano, y = total, col = tipos_intox)) + geom_line() +
+  theme_minimal() + ggtitle("Número de intoxicações em Goiás (SINAN - 2022)")
+
+plotly::ggplotly(a)
+```
+
+
+```{r}
+
+tipo_classif_intox<- c("Intoxicação Confirmada", "Exposição", "Reação adversa","Diagnóstico diferencial","Síndrome de abstinência")
+
+funcao_propria <- function(tipo_classif_intox){
+
+  base_intox %>% 
+    filter(classif == tipo_classif_intox) %>% 
+    group_by(classif, uf, mes_ano) %>%
+    summarise(total = n())
+
+}
+
+bases_classif <- tibble()
+
+
+for (intox_class in tipo_classif_intox){
+  
+  intermed <- funcao_propria(tipo_classif_intox = intox_class)
+  bases_classif <- rbind(intermed, bases_classif)
+}
+```
+
+
+
+
+```{r}
+
+
+b <- bases_classif %>% 
+  filter(uf == "Goiás") %>% 
+  ggplot(aes(x = mes_ano, y = total, col = classif)) + geom_line() + theme_minimal()+ ggtitle("Número de agravos por intoxicação em Goiás (SINAN - 2022)")
+
+
+plotly::ggplotly(b)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
