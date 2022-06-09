@@ -15,8 +15,6 @@ library(roperators)
 
 if (!require(RODBC)) { install.packages(RODBC); require(RODBC) }
 
-setwd("~/GitHub/dimensionamento/Demanda maio 2022/Demandas")
-
 dremio_host <- "200.137.215.27"
 dremio_port <- "31010"
 dremio_uid <- "daniel"
@@ -24,7 +22,7 @@ dremio_pwd <- Sys.getenv("datalake")
 
 channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
 
-
+options(scipen = 999)
 ```
 
 ## **Indicador 1 - Estabelecimentos hospitalares já existentes com ampliação de leitos covid-19** 
@@ -48,6 +46,14 @@ df <- sqlQuery(channel, 'SELECT a.CNES, FANTASIA, RAZ_SOCI, RSOC_MAN,
 
 df$CNES <- as.character(df$CNES)
 
+
+nomes_estabelecimentos <- 
+  df %>% 
+  filter(COMPETEN == "202112") %>%
+  janitor::clean_names() %>% 
+  select(cnes, fantasia) %>% 
+  distinct()
+
 ```
 
 Primeiramente, preciso saber quais eram os estabelecimentos que já existiam em 2019. Para feitos de análise, foram acessados os estabelecimentos nas competências 12 (Dezembro) de 2019. 
@@ -67,15 +73,24 @@ cnes_20_21_exist <- df %>%
   filter(COMPETEN == "202012" | COMPETEN == "202112") %>% 
   filter(CNES %in% cnes_2019c) %>% 
   filter(CODLEITO %in% leitos) %>% 
-  select(COMPETEN, uf, CODUFMUN, municipio_pad, regiao,  CNES, FANTASIA, RAZ_SOCI, 
-         CODLEITO, QT_EXIST) 
+  mutate(tipo_hospital = "Hospitais existentes") %>% 
+  group_by(COMPETEN, tipo_hospital, uf, municipio_pad, regiao,  CNES, FANTASIA) %>% 
+  summarise(qtd_leitos = sum(QT_EXIST)) %>% 
+  janitor::clean_names()
   
   
 ```
 
 Os estabelecimentos que cumprem os requisitos estão listados abaixo. 
 
+
+```{r include=FALSE}
+#writexl::write_xlsx(cnes_20_21_exist, "00_leitos_hospitais_exist.xlsx")
+```
+
+
 ```{r echo=FALSE}
+
 DT::datatable(cnes_20_21_exist)
 ```
 
@@ -84,12 +99,12 @@ Temos a seguinte situação em termos de leitos no último mês de 2020 e 2021, 
 ```{r}
 
 c <- cnes_20_21_exist %>% 
-  mutate(Ano = as.integer(substr(COMPETEN, 1, 4))) %>% 
+  mutate(Ano = as.integer(substr(competen, 1, 4))) %>% 
   group_by(Ano, regiao) %>% 
-  summarise(qtd_existente = sum(QT_EXIST)) %>% 
-  ggplot(aes(x = Ano, y = qtd_existente, col = regiao)) + geom_line() + 
+  summarise(qtd_leitos = sum(qtd_leitos)) %>% 
+  ggplot(aes(x = Ano, y = qtd_leitos, fill = regiao)) + geom_col(position="dodge") + 
   scale_x_continuous(breaks = seq(2020,2021,1)) +
-  theme_minimal() + ylab("Quantidade existente") + ggtitle("Quantidade de leitos existentes",
+  theme_minimal() + ylab("Quantidade existente") + ggtitle("Quantidade de leitos existentes em dezembro de cada ano por região",
                                                            "Fonte: CNES-LT")
 
   
@@ -104,38 +119,43 @@ O próximo passo é identificar quantos hospitais que já existiam em 2019 e tin
 ```{r}
 
 cnes20 <- cnes_20_21_exist %>% 
-  filter(COMPETEN == "202012") %>% 
-  distinct(CNES, FANTASIA, RAZ_SOCI, uf, regiao) %>% 
-  group_by(regiao) %>% 
+  filter(competen == "202012") %>% 
+  distinct(cnes, fantasia, uf, regiao) %>% 
+  group_by(regiao, uf, municipio_pad) %>% 
   summarise(total = n()) %>% 
   mutate(ano = 2020)
    
   
 cnes20_c <- cnes_20_21_exist %>% 
-              filter(COMPETEN == "202012") %>% 
-              distinct(CNES)
+              filter(competen == "202012") %>% 
+              distinct(cnes)
 
-cnes20_c <- cnes20_c$CNES
+cnes20_c <- cnes20_c$cnes
 
 
 cnes21 <- cnes_20_21_exist %>% 
-            filter(COMPETEN == "202112") %>% 
-            filter(CNES %ni% cnes20_c) %>% 
-            distinct(CNES, FANTASIA, RAZ_SOCI, uf, regiao) %>% 
-            group_by(regiao) %>% 
+            filter(competen == "202112") %>% 
+            #filter(cnes %ni% cnes20_c) %>% 
+            distinct(cnes, fantasia, uf, regiao) %>% 
+            group_by(regiao, uf, municipio_pad) %>% 
             summarise(total = n()) %>% 
             mutate(ano = 2021)
 
-cnes_novos <- rbind(cnes20, cnes21)
+cnes_exist <- rbind(cnes20, cnes21)
 
-d <- cnes_existentes %>% 
+d <- cnes_exist %>% 
+      group_by(regiao, ano) %>% 
+      summarise(total = sum(total)) %>% 
       ggplot(aes(x = ano, y = total, fill = regiao)) + geom_col(position = "dodge") +  
       theme_minimal() +  scale_x_continuous(breaks = seq(2020,2021,1)) + 
-      ylab("Quantidade de estabelecimentos") + ggtitle("Quantidade de estabelecimentos existentes em cada ano",
-                                                       "Fonte: CNES-LT")
+      ylab("Quantidade de estabelecimentos") + ggtitle("Quantidade de estabelecimentos existentes em 2019 em cada ano")
 
 plotly::ggplotly(d)
 
+```
+
+```{r}
+#writexl::write_xlsx(cnes_exist, "01_estabelecimentos_exist.xlsx")
 ```
 
 
@@ -146,7 +166,7 @@ plotly::ggplotly(d)
 
 Primeiramente, preciso saber quais eram os estabelecimentos que foram criados nos anos de 2020 e 2021. Para isso, vou excluir todos os estabelecimentos que já existiam em 2019, pegando apenas os novos os anos subsequentes. 
 
-Para feitos de análise, foram acessados os estabelecimentos nas competências 12 (Dezembro) de cada ano.
+Para efeitos de análise, foram acessados os estabelecimentos nas competências 12 (Dezembro) de cada ano.
 
 
 ```{r}
@@ -163,12 +183,20 @@ leitos <- c(51, 52, 96)
 cnes_20_21_novos <- df %>% 
   filter(COMPETEN == "202012" | COMPETEN == "202112") %>% 
   filter(CNES %ni% cnes_2019c) %>% 
+  mutate(tipo_hospital = "Hospitais existentes") %>% 
   filter(str_detect(FANTASIA, "covid") | CODLEITO %in% leitos) %>% 
-  select(COMPETEN, uf, CODUFMUN, municipio_pad, regiao,  CNES, FANTASIA, RAZ_SOCI, 
-         CODLEITO, QT_EXIST) 
+  group_by(COMPETEN, tipo_hospital, uf, municipio_pad, regiao,  CNES, FANTASIA) %>% 
+  summarise(qtd_leitos = sum(QT_EXIST)) %>% 
+  janitor::clean_names()
   
   
 ```
+
+```{r}
+# writexl::write_xlsx(cnes_20_21_novos, "02_leitos_hospitais_novos.xlsx")
+```
+
+
 
 Os estabelecimentos que cumprem os requisitos estão listados abaixo. 
 
@@ -181,10 +209,10 @@ Temos a seguinte situação em termos de leitos no último mês de 2020 e 2021 r
 ```{r}
 
 a <- cnes_20_21_novos %>% 
-  mutate(Ano = as.integer(substr(COMPETEN, 1, 4))) %>% 
+  mutate(Ano = as.integer(substr(competen, 1, 4))) %>% 
   group_by(Ano, regiao) %>% 
-  summarise(qtd_existente = sum(QT_EXIST)) %>% 
-  ggplot(aes(x = Ano, y = qtd_existente, col = regiao)) + geom_line() + 
+  summarise(qtd_leitos = sum(qtd_leitos)) %>% 
+  ggplot(aes(x = Ano, y = qtd_leitos, fill = regiao)) + geom_col(position = "dodge") + 
   scale_x_continuous(breaks = seq(2020,2021,1)) +
   theme_minimal() + ylab("Quantidade existente") + ggtitle("Quantidade de leitos existentes",
                                                            "Fonte: CNES-LT")
@@ -201,31 +229,33 @@ O próximo passo é identificar quantos hospitais novos foram criados cada ano
 ```{r}
 
 cnes20 <- cnes_20_21_novos %>% 
-  filter(COMPETEN == "202012") %>% 
-  distinct(CNES, FANTASIA, RAZ_SOCI, uf, regiao) %>% 
-  group_by(regiao) %>% 
+  filter(competen == "202012") %>% 
+  distinct(cnes, fantasia, uf, regiao) %>% 
+  group_by(regiao, uf, municipio_pad) %>% 
   summarise(total = n()) %>% 
   mutate(ano = 2020)
    
   
 cnes20_c <- cnes_20_21_novos %>% 
-              filter(COMPETEN == "202012") %>% 
-              distinct(CNES)
+              filter(competen == "202012") %>% 
+              distinct(cnes)
 
-cnes20_c <- cnes20_c$CNES
+cnes20_c <- cnes20_c$cnes
 
 
 cnes21 <- cnes_20_21_novos %>% 
-            filter(COMPETEN == "202112") %>% 
-            filter(CNES %ni% cnes20_c) %>% 
-            distinct(CNES, FANTASIA, RAZ_SOCI, uf, regiao) %>% 
-            group_by(regiao) %>% 
+            filter(competen == "202112") %>% 
+            filter(cnes %ni% cnes20_c) %>% 
+            distinct(cnes, fantasia, uf, regiao) %>% 
+            group_by(regiao, uf, municipio_pad) %>% 
             summarise(total = n()) %>% 
             mutate(ano = 2021)
 
 cnes_novos <- rbind(cnes20, cnes21)
 
 b <- cnes_novos %>% 
+      group_by(ano, regiao) %>% 
+      summarise(total = sum(total)) %>% 
       ggplot(aes(x = ano, y = total, fill = regiao)) + geom_col(position = "dodge") +  
       theme_minimal() +  scale_x_continuous(breaks = seq(2020,2021,1)) + 
       ylab("Quantidade de estabelecimentos") + ggtitle("Quantidade de estabelecimentos novos em cada ano",
@@ -233,6 +263,10 @@ b <- cnes_novos %>%
 
 plotly::ggplotly(b)
 
+```
+
+```{r include=FALSE}
+# writexl::write_xlsx(cnes_novos, "04_estabelecimentos_novos.xlsx")
 ```
 
 
@@ -258,11 +292,11 @@ Vamos pegar os mesmos estabelecimentos que filtramos no indicador 1.
 
 df3_t <- df3 %>% 
   filter(CNES %in% cnes_2019c) %>% 
-  mutate(mes_ano = lubridate::ym(COMPETEN)) %>% 
-  group_by(regiao, mes_ano) %>% 
+  mutate(mes_ano = lubridate::ym(COMPETEN),
+         ano = lubridate::year(mes_ano)) %>% 
+  group_by(regiao, uf, municipio_pad, mes_ano, ano) %>% 
   summarise(total = sum(QTD)) %>% 
-  filter(mes_ano > "2019-12-01") %>% 
-  filter(regiao != "NA")
+  filter(mes_ano > "2019-12-01")
 
 DT::datatable(df3_t)
 
@@ -271,6 +305,8 @@ DT::datatable(df3_t)
 ```{r}
 
 e <- df3_t %>% 
+  group_by(mes_ano, regiao) %>% 
+  summarise(total = sum(total)) %>% 
   ggplot(aes(x = mes_ano, y = total, col = regiao)) + geom_line() + 
   facet_wrap(~regiao, scales = "free_y") + theme_minimal() +
   scale_x_date(date_breaks = "1 year") + theme(legend.position="none")
@@ -280,6 +316,21 @@ plotly::ggplotly(e)
 
 ```
 
+Em média, por ano tínhamos a seguinte distribuição por município 
+
+```{r}
+
+respiradores_hosp_existentes <- df3_t %>% 
+  janitor::clean_names() %>% 
+  group_by(ano, regiao, uf, municipio_pad) %>% 
+  summarise(total = round(mean(total),2))
+
+# writexl::write_xlsx(respiradores_hosp_existentes, "05_respiradores_hosp_existentes.xlsx")
+
+
+```
+
+
 
 ## **Indicador 4 - Respiradores cadastrados nos estabelecimentos hospitalares já existentes NOVOS PARA COVID**
 
@@ -288,11 +339,11 @@ Vamos levantar o número de respiradores naqueles estabelecimentos que incluíra
 ```{r}
 df_4 <- df3 %>% 
   filter(CNES %ni% cnes_2019c) %>% 
-  mutate(mes_ano = lubridate::ym(COMPETEN)) %>% 
-  group_by(regiao, mes_ano) %>% 
+  mutate(mes_ano = lubridate::ym(COMPETEN),
+         ano = lubridate::year(mes_ano)) %>% 
+  group_by(regiao, uf, municipio_pad, ano, mes_ano) %>% 
   summarise(total = sum(QTD)) %>% 
-  filter(mes_ano > "2019-12-01") %>% 
-  filter(regiao != "NA")
+  filter(mes_ano > "2019-12-01") 
 
 DT::datatable(df_4)
 
@@ -300,6 +351,8 @@ DT::datatable(df_4)
 
 ```{r}
 f <- df_4 %>% 
+  group_by(mes_ano, regiao) %>% 
+  summarise(total = sum(total)) %>% 
   ggplot(aes(x = mes_ano, y = total, col = regiao)) + geom_line() + 
   facet_wrap(~regiao, scales = "free_y") + theme_minimal() +
   scale_x_date(date_breaks = "1 year") + theme(legend.position="none")
@@ -308,13 +361,225 @@ f <- df_4 %>%
 plotly::ggplotly(f)
 ```
 
+Em média, por ano tínhamos a seguinte distribuição por município 
+
+```{r}
+
+respiradores_hosp_novos <- df_4 %>% 
+  janitor::clean_names() %>% 
+  group_by(ano, regiao, uf, municipio_pad) %>% 
+  summarise(total = round(mean(total),2))
+
+ # writexl::write_xlsx(respiradores_hosp_novos, "06_respiradores_hosp_novos.xlsx")
+
+
+```
+
 
 
 ## **Indicador 5 - Internação em UTI covid-19 por estabelecimento de saúde, conforme os indicadores apontados nas linhas 1 e 2 acima** 
 
+Os seguintes código CID-10 foram utilizados para buscar os casos de covid-19, conforme recomendação de preenchimento para morbimortalidade do[ Guia de Vigilância Epidemiológica: Emergência de Saúde Pública de Importância Nacional pela Doença pelo Coronavírus 2019 - Covid-19, versão 4, 2022](https://www.gov.br/saude/pt-br/coronavirus/publicacoes-tecnicas/guias-e-planos/guia-de-vigilancia-epidemiologica-covid-19).
+
+**Diagnóstico**
++ B34.2 - Infecção por coronavírus de localização não especificada
++ U07.1 - covid-19, vírus identificado. É atribuído a um diagnóstico da covid-19 confirmada por
+testes de laboratório
++ U07.2 (covid-19, vírus não identificado, clínico-epidemiológico. É atribuído a um diagnóstico
+clínico ou epidemiológico da covid-19, em que a confirmação laboratorial é inconclusiva ou
+não está disponível).
+
+Os códigos U07.1 (covid-19, vírus identificado) e U07.2 (covid-19, vírus não identificado,
+clínico-epidemiológico), definidos pela Organização Mundial de Saúde (OMS), são os marcadores
+da pandemia no Brasil, devendo sempre vir após o código B34.2, na mesma linha.
+
+
+**Condições pós-COVID-19**
++ B94.8 (sequelas de outras doenças infecciosas e parasitárias especificadas).
++ U09.9 (condição de saúde posterior à covid-19, não especificada)
++ M30.3 (síndrome de linfonodos mucocutâneos – Kawasaki).
++ U10.9 (síndrome inflamatória multissistêmica associada à covid-19, não especificada)
+
+**Vacinação e evento adverso à vacina COVID**
++ Y59.0 (vacinas antivirais) e T88.7 (efeito adverso não especificado de droga ou
+medicamento)
++ U12.9 (vacinas contra a covid-19 que causam efeitos adversos com finalidade terapêutica,
+não especificada)
+
+
+**Reincidência de COVID-19**
++ B34.2 (infecção pelo coronavírus de localização não especificada)
++ U92.1 (reincidência de covid-19, confirmada)
+
+Buscamos todas as observações cujo diagnóstico principal OU secundário fossem dos CID-10 indicados acima. 
+
+```{r}
+internacoes <- 
+  sqlQuery(channel, "SELECT ANO_CMPT, MES_CMPT, UF_ZI, MUNIC_RES, DT_INTER, DT_SAIDA, DIAS_PERM, 
+       MORTE, DIAG_PRINC, DIAG_SECUN, CID_ASSO, CID_MORTE, uf, competencia, 
+       CNES
+                    FROM Dados.sih.RD
+                    WHERE substr(DT_INTER, 1, 4) > 2019 AND 
+                          (DIAG_PRINC = 'B342' OR DIAG_PRINC = 'U071'
+                          OR DIAG_PRINC = 'U072' OR DIAG_PRINC = 'B948'
+                          OR DIAG_PRINC = 'U099' OR DIAG_PRINC = 'M303'
+                          OR DIAG_PRINC = 'U109' OR DIAG_PRINC = 'Y590'
+                          OR DIAG_PRINC = 'U129' OR DIAG_PRINC = 'U921'
+                          OR DIAG_SECUN = 'B342' OR DIAG_SECUN = 'U071'
+                          OR DIAG_SECUN = 'U072' OR DIAG_SECUN = 'B948'
+                          OR DIAG_SECUN = 'U099' OR DIAG_SECUN = 'M303'
+                          OR DIAG_SECUN = 'U109' OR DIAG_SECUN = 'Y590'
+                          OR DIAG_SECUN = 'U129' OR DIAG_SECUN = 'U921') ", as.is = TRUE)
+
+```
+
+Fazendo uma análise exploratória rápida dos dados, observa-se que a maioria dos casos foram registrados sob o CID-10 B342. 
+
+```{r}
+internacoes %>% 
+  group_by(DIAG_PRINC) %>% 
+  count()
+```
+
+Também vemos que a coluna diagnóstico secundário não foi preenchida nenhuma vez. 
+
+```{r}
+internacoes %>% 
+  group_by(DIAG_SECUN) %>% 
+  count()
+```
+
+Vamos pegar o número de internações por mês conforme as condições listadas nos itens 1 e 2. 
+
+```{r}
+
+internacoes_hospitais_exist <-
+  internacoes %>% 
+  janitor::clean_names() %>% 
+  mutate(mes_ano = substr(dt_inter, 1, 6),
+         mes_ano = lubridate::ym(mes_ano),
+         ano = lubridate::year(mes_ano)) %>% 
+  filter(cnes %in% cnes_2019c) %>% 
+  group_by(ano, mes_ano, uf, cnes) %>% 
+  summarise(total = n()) %>% 
+  mutate(tipo_hosp = "hospitais existentes")
+
+
+internacoes_hospitais_novos <- 
+  internacoes %>% 
+  janitor::clean_names() %>% 
+  mutate(mes_ano = substr(dt_inter, 1, 6),
+         mes_ano = lubridate::ym(mes_ano),
+         ano = lubridate::year(mes_ano)) %>% 
+  filter(cnes %ni% cnes_2019c) %>% 
+  group_by(ano, mes_ano, uf, cnes) %>% 
+  summarise(total = n()) %>% 
+  mutate(tipo_hosp = "hospitais novos")
+
+
+internacoes_total <- rbind(internacoes_hospitais_exist, internacoes_hospitais_novos)
+
+g <- internacoes_total %>% 
+  group_by(ano, tipo_hosp) %>% 
+  summarise(total_internacoes = sum(total)) %>% 
+  ggplot(aes(x = ano, y = total_internacoes,
+             fill = tipo_hosp)) + geom_col(position = "dodge") + 
+  theme_minimal()
+
+plotly::ggplotly(g)
+
+```
+
 ## ** Mortalidade por covid-19 em UTI Covid-19 por estabelecimento de saúde, conforme os indicadores apontados nas linhas 1 e 2 acima**
 
+```{r}
+
+obitos_hospitais_exist <-
+  internacoes %>% 
+  janitor::clean_names() %>% 
+  filter(morte == 1) %>% 
+  mutate(mes_ano = substr(dt_inter, 1, 6),
+         mes_ano = lubridate::ym(mes_ano),
+         ano = lubridate::year(mes_ano)) %>% 
+  filter(cnes %in% cnes_2019c) %>% 
+  group_by(ano, mes_ano, uf, cnes) %>% 
+  summarise(total = n()) %>% 
+  mutate(tipo_hosp = "hospitais existentes")
+
+
+
+obitos_hospitais_novos <- 
+  internacoes %>% 
+  janitor::clean_names() %>% 
+  filter(morte == 1) %>% 
+  mutate(mes_ano = substr(dt_inter, 1, 6),
+         mes_ano = lubridate::ym(mes_ano),
+         ano = lubridate::year(mes_ano)) %>% 
+  filter(cnes %ni% cnes_2019c) %>% 
+  group_by(ano, mes_ano, uf, cnes) %>% 
+  summarise(total = n()) %>% 
+  mutate(tipo_hosp = "hospitais novos")
+
+
+obitos_total <- rbind(obitos_hospitais_exist, obitos_hospitais_novos)
+
+h <- obitos_total %>% 
+  group_by(ano, tipo_hosp) %>% 
+  summarise(total_obitos = sum(total)) %>% 
+  ggplot(aes(x = ano, y = total_obitos,
+             fill = tipo_hosp)) + geom_col(position = "dodge") + 
+  theme_minimal()
+
+plotly::ggplotly(h)
+
+
+
+```
+
+O gráfico acima apresenta as internações que tiveram óbito como desfecho. 
+
+
 ## ** Média de duração da internação em UTI Covid-19, por estabelecimento de saúde, conforme os indicadores apontados nas linhas 1 e 2 acima**
+
+```{r}
+
+dias_hospitais_exist <-
+  internacoes %>% 
+  janitor::clean_names() %>% 
+  mutate(mes_ano = substr(dt_inter, 1, 6),
+         mes_ano = lubridate::ym(mes_ano),
+         ano = lubridate::year(mes_ano)) %>% 
+  filter(cnes %in% cnes_2019c) %>% 
+  group_by(ano) %>% 
+  summarise(dias_medios = round(mean(dias_perm),2)) %>% 
+  mutate(tipo_hosp = "hospitais existentes")
+
+
+
+dias_hospitais_novos <- 
+  internacoes %>% 
+  janitor::clean_names() %>% 
+  mutate(mes_ano = substr(dt_inter, 1, 6),
+         mes_ano = lubridate::ym(mes_ano),
+         ano = lubridate::year(mes_ano)) %>% 
+  filter(cnes %ni% cnes_2019c) %>% 
+  group_by(ano) %>% 
+  summarise(dias_medios = round(mean(dias_perm),2)) %>% 
+  mutate(tipo_hosp = "hospitais novos")
+
+
+media_dias_hospitais <- rbind(dias_hospitais_exist, dias_hospitais_novos)
+
+i <- media_dias_hospitais %>% 
+  ggplot(aes(x = ano, y = dias_medios,
+             fill = tipo_hosp)) + geom_col(position = "dodge") + 
+  theme_minimal()
+
+plotly::ggplotly(i)
+
+```
+
+Observa-se que, em média, tivemos médias muito próximas, por volta de 8 dias. 
 
 
 
