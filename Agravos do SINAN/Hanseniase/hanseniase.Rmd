@@ -47,12 +47,18 @@ mutate(formas_clinicas = case_when(FORMACLINI == 1 ~ "I - Indeterminada",
                               FORMACLINI == 5 ~ "Não classificado" ))%>%
 mutate(classif_op = case_when(CLASSOPERA == 1 ~ "PB - Paucibacilar", 
                            CLASSOPERA == 2 ~ "MB - Multibacilar"))%>%
+  
+mutate(incap_fisica_cura = case_when(AVAL_ATU_N == 0 ~ "Grau zero",
+                                     AVAL_ATU_N == 01 ~ "Grau 1",
+                                     AVAL_ATU_N == 02 ~ "Grau 2",
+                                     AVAL_ATU_N == 03 ~ "Não avaliado",
+                                     AVAL_ATU_N == 09 ~ "Ignorado"))%>%
   mutate(mes_ano = ymd(DT_NOTIFIC),
            mes_ano = format_ISO8601(mes_ano, precision = "ym"),
            mes_ano = ym(mes_ano)) %>% 
     left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
 
-glimpse(Hanseniase)
+glimpse(base_hans)
 
 
 ```
@@ -90,8 +96,10 @@ for (form_clin in forma_clinica){
 
 ```
 
-Observamos uma queda em todas as notificações das formas clinicas no final do ano.
 
+
+
+Observamos uma queda em todas as notificações das formas clinicas no final do ano.
 
 ```{r}
 
@@ -144,6 +152,49 @@ plotly::ggplotly(b)
 
 ```
 
+
+```{r}
+
+
+incap_fisica <- c("Grau zero","Grau 1","Grau 2","Não avaliado")
+
+funcao_propria <- function(incap_fisica){
+
+  base_hans %>% 
+    filter(incap_fisica_cura == incap_fisica) %>% 
+    group_by(incap_fisica_cura, uf, mes_ano) %>%
+    summarise(total = n())
+
+}
+
+bases_fisica <- tibble()
+
+
+for (fisica in incap_fisica){
+  
+  intermed <- funcao_propria(incap_fisica = fisica)
+  bases_fisica <- rbind(intermed, bases_fisica)
+}
+
+
+
+
+
+```
+
+```{r}
+
+
+c <- bases_fisica%>% 
+  filter(uf == "Goiás") %>% 
+  ggplot(aes(x = mes_ano, y = total, col = incap_fisica_cura)) + geom_line() + theme_minimal()+ ggtitle("Incapacidade física no momento da cura - Hanseníase em Goiás (SINAN - 2021)")
+
+
+plotly::ggplotly(c)
+
+
+
+```
 
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
