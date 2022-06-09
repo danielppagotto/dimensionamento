@@ -25,7 +25,7 @@ When you click the **Knit** button a document will be generated that includes bo
 ```{r cars}
 summary(cars)
 
-Hanseniase <- read.dbc::read.dbc("HANSBR22.dbc")
+Hanseniase <- read.dbc::read.dbc("HANSBR21.dbc")
 
 df_territorial <- read.csv("https://raw.githubusercontent.com/danielppagotto/dimensionamento/main/Agravos%20do%20SINAN/Animais%20pe%C3%A7onhentos/df_territorial.csv")
 
@@ -40,11 +40,11 @@ mutate(faixa_etaria = case_when(NU_IDADE_N < 4000 ~ "Menor que 1 ano",
                                 NU_IDADE_N >= 4045 & NU_IDADE_N < 4055 ~ "Entre 45 e 54 anos", 
                                 NU_IDADE_N >= 4055 & NU_IDADE_N < 4065 ~ "Entre 55 e 64 anos", 
                                 NU_IDADE_N >= 4065 ~ "65 ou mais "))%>%
-mutate(formas_clinicas = case_when(FORMACLINI == "01" ~ "I -Indeterminada",
-                              FORMACLINI == "02" ~ "T - Tuberculóide", 
-                              FORMACLINI == "03" ~ "D - Dimorfa",
-                              FORMACLINI == "04" ~ "V - Virchowiana", 
-                              FORMACLINI == "05" ~ "Não classificado" ))%>%
+mutate(formas_clinicas = case_when(FORMACLINI == 1 ~ "I - Indeterminada",
+                              FORMACLINI == 2 ~ "T - Tuberculóide", 
+                              FORMACLINI == 3 ~ "D - Dimorfa",
+                              FORMACLINI == 4 ~ "V - Virchowiana", 
+                              FORMACLINI == 5 ~ "Não classificado" ))%>%
 mutate(classif_op = case_when(CLASSOPERA == 1 ~ "PB - Paucibacilar", 
                            CLASSOPERA == 2 ~ "MB - Multibacilar"))%>%
   mutate(mes_ano = ymd(DT_NOTIFIC),
@@ -52,7 +52,7 @@ mutate(classif_op = case_when(CLASSOPERA == 1 ~ "PB - Paucibacilar",
            mes_ano = ym(mes_ano)) %>% 
     left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
 
-
+glimpse(Hanseniase)
 
 
 ```
@@ -65,7 +65,7 @@ You can also embed plots, for example:
 plot(pressure)
 
 
-forma_clinica <- c("Medicamento", "Planta tóxica")
+forma_clinica <- c("I - Indeterminada","T - Tuberculóide","D - Dimorfa","V - Virchowiana")
 
 funcao_propria <- function(forma_clinica){
 
@@ -89,5 +89,61 @@ for (form_clin in forma_clinica){
 
 
 ```
+
+Observamos uma queda em todas as notificações das formas clinicas no final do ano.
+
+
+```{r}
+
+a <- bases %>% 
+  filter(uf == "Goiás") %>% 
+  ggplot(aes(x = mes_ano, y = total, col = formas_clinicas)) + geom_line() +
+  theme_minimal() + ggtitle("Número de casos de hanseníase por formas clínicas da doença em Goiás (SINAN - 2021)")
+
+plotly::ggplotly(a)
+
+```
+
+
+```{r}
+
+tipo_classif <- c("PB - Paucibacilar", "MB - Multibacilar")
+
+funcao_propria <- function(tipo_classif){
+
+  base_hans %>% 
+    filter(classif_op == tipo_classif) %>% 
+    group_by(classif_op, uf, mes_ano) %>%
+    summarise(total = n())
+
+}
+
+bases_classif <- tibble()
+
+
+for (class in tipo_classif){
+  
+  intermed <- funcao_propria(tipo_classif = class)
+  bases_classif <- rbind(intermed, bases_classif)
+}
+
+
+```
+
+
+```{r}
+
+b <- bases_classif %>% 
+  filter(uf == "Goiás") %>% 
+  ggplot(aes(x = mes_ano, y = total, col = classif_op)) + geom_line() + theme_minimal()+ ggtitle("Classificação - Hanseníase em Goiás (SINAN - 2021)")
+
+
+plotly::ggplotly(b)
+
+
+
+```
+
+
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
