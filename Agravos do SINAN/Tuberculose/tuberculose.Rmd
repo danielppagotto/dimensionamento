@@ -55,6 +55,7 @@ mutate(diagnosticos = case_when(BACILOSC_E == 1 ~ "Positiva",
            mes_ano = ym(mes_ano)) %>% 
     left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
 
+glimpse(Tuberculose)
 
 
 
