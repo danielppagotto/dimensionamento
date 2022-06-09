@@ -42,7 +42,7 @@ mutate(faixa_etaria = case_when(NU_IDADE_N < 4000 ~ "Menor que 1 ano",
                                 NU_IDADE_N >= 4045 & NU_IDADE_N < 4055 ~ "Entre 45 e 54 anos", 
                                 NU_IDADE_N >= 4055 & NU_IDADE_N < 4065 ~ "Entre 55 e 64 anos", 
                                 NU_IDADE_N >= 4065 ~ "65 ou mais "))%>%
-mutate(diagnosticos = case_when(CLASSI_FIN == 5 ~ "Descartado",
+mutate(diagnosticos = case_when(CLASSI_FIN == 5 ~  "Descartado",
                                 CLASSI_FIN == 10 ~ "Dengue", 
                                 CLASSI_FIN == 11 ~ "Dengue com sinais de alarme",
                                 CLASSI_FIN == 12 ~ "Dengue grave",
