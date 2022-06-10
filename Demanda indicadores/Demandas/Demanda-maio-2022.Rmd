@@ -23,6 +23,8 @@ dremio_pwd <- Sys.getenv("datalake")
 channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
 
 options(scipen = 999)
+
+setwd("~/GitHub/dimensionamento/Demanda indicadores/Demandas")
 ```
 
 ## **Indicador 1 - Estabelecimentos hospitalares já existentes com ampliação de leitos covid-19** 
@@ -379,7 +381,7 @@ respiradores_hosp_novos <- df_4 %>%
 
 ## **Indicador 5 - Internação em UTI covid-19 por estabelecimento de saúde, conforme os indicadores apontados nas linhas 1 e 2 acima** 
 
-Os seguintes código CID-10 foram utilizados para buscar os casos de covid-19, conforme recomendação de preenchimento para morbimortalidade do[ Guia de Vigilância Epidemiológica: Emergência de Saúde Pública de Importância Nacional pela Doença pelo Coronavírus 2019 - Covid-19, versão 4, 2022](https://www.gov.br/saude/pt-br/coronavirus/publicacoes-tecnicas/guias-e-planos/guia-de-vigilancia-epidemiologica-covid-19).
+Os seguintes código CID-10 foram utilizados para buscar os casos de covid-19, conforme recomendação de preenchimento para morbimortalidade do [Guia de Vigilância Epidemiológica: Emergência de Saúde Pública de Importância Nacional pela Doença pelo Coronavírus 2019 - Covid-19, versão 4, 2022](https://www.gov.br/saude/pt-br/coronavirus/publicacoes-tecnicas/guias-e-planos/guia-de-vigilancia-epidemiologica-covid-19).
 
 **Diagnóstico**
 + B34.2 - Infecção por coronavírus de localização não especificada
@@ -413,12 +415,14 @@ não especificada)
 
 Buscamos todas as observações cujo diagnóstico principal OU secundário fossem dos CID-10 indicados acima. 
 
+Selecionamos apenas as internações em UTI.
+
 **Obs.:** As observações agregadas a nível município se referem ao município do estabelecimento de saúde e não o município de residência do paciente. 
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 internacoes <- 
   sqlQuery(channel, "SELECT ANO_CMPT, MES_CMPT, UF_ZI, MUNIC_RES, DT_INTER, DT_SAIDA, DIAS_PERM, 
-       MORTE, DIAG_PRINC, DIAG_SECUN, CID_ASSO, CID_MORTE, uf, competencia, 
+       MORTE, DIAG_PRINC, DIAG_SECUN, CID_ASSO, CID_MORTE, uf, competencia, MARCA_UTI,
        CNES
                     FROM Dados.sih.RD
                     WHERE substr(DT_INTER, 1, 4) > 2019 AND 
@@ -434,25 +438,46 @@ internacoes <-
                           OR DIAG_SECUN = 'U129' OR DIAG_SECUN = 'U921') ", as.is = TRUE)
 
 
-internacoes <- 
+municipios <- 
+  sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."Municípios - Hierarquia Completa"', 
+           as.is = TRUE) %>% 
+  select(cod_municipio, municipio_pad)
+
+municipios$cod_municipio <- as.integer(municipios$cod_municipio)
+
+Cadger <- read_csv("~/GitHub/bases_uteis_saude/Cadger.csv", 
+    locale = locale(encoding = "ISO-8859-1", 
+        asciify = TRUE))
+
+internacoes_t <- 
   internacoes %>% 
-  left_join(nomes_estabelecimentos, by = c("CNES"="cnes"))
+  left_join(Cadger, by = c("CNES"="CNES")) %>% 
+  janitor::clean_names() %>% 
+  left_join(municipios, by = c("codufmun"="cod_municipio")) %>% 
+  mutate(marca_uti = as.integer(marca_uti)) %>% 
+  filter(marca_uti > 73 & marca_uti < 87 | marca_uti == 99)
+
+todas_internacoes <- 
+  internacoes %>% 
+  left_join(Cadger, by = c("CNES"="CNES")) %>% 
+  janitor::clean_names() %>% 
+  left_join(municipios, by = c("codufmun"="cod_municipio"))
 
 ```
 
 Fazendo uma análise exploratória rápida dos dados, observa-se que a maioria dos casos foram registrados sob o CID-10 B342. 
 
 ```{r}
-internacoes %>% 
-  group_by(DIAG_PRINC) %>% 
+internacoes_t %>% 
+  group_by(diag_princ) %>% 
   count()
 ```
 
 Também vemos que a coluna diagnóstico secundário não foi preenchida nenhuma vez. 
 
 ```{r}
-internacoes %>% 
-  group_by(DIAG_SECUN) %>% 
+internacoes_t %>% 
+  group_by(diag_secun) %>% 
   count()
 ```
 
@@ -461,7 +486,7 @@ Vamos pegar o número de internações por mês conforme as condições listadas
 ```{r}
 
 internacoes_hospitais_exist <-
-  internacoes %>% 
+  internacoes_t %>% 
   janitor::clean_names() %>% 
   mutate(mes_ano = substr(dt_inter, 1, 6),
          mes_ano = lubridate::ym(mes_ano),
@@ -473,7 +498,7 @@ internacoes_hospitais_exist <-
 
 
 internacoes_hospitais_novos <- 
-  internacoes %>% 
+  internacoes_t %>% 
   janitor::clean_names() %>% 
   mutate(mes_ano = substr(dt_inter, 1, 6),
          mes_ano = lubridate::ym(mes_ano),
@@ -503,23 +528,21 @@ Acessado o total de nascimentos por município, tem-se:
 
 internacoes_total <- 
   internacoes_total %>% 
-  group_by(ano, municipio_pad, tipo_hosp) %>% 
+  group_by(ano, uf, municipio_pad, tipo_hosp) %>% 
   summarise(total_internacoes = sum(total))
 
-writexl::write_xlsx(internacoes_total, "07_internacoes.xlsx")
+# writexl::write_xlsx(internacoes_total, "07_internacoes.xlsx")
 
 
 ```
 
 
-
-
-## ** Mortalidade por covid-19 em UTI Covid-19 por estabelecimento de saúde, conforme os indicadores apontados nas linhas 1 e 2 acima**
+##**Indicador 6: Mortalidade por covid-19 em UTI Covid-19 por estabelecimento de saúde, conforme os indicadores apontados nas linhas 1 e 2 acima**
 
 ```{r}
 
 obitos_hospitais_exist <-
-  internacoes %>% 
+  internacoes_t %>% 
   janitor::clean_names() %>% 
   filter(morte == 1) %>% 
   mutate(mes_ano = substr(dt_inter, 1, 6),
@@ -533,7 +556,7 @@ obitos_hospitais_exist <-
 
 
 obitos_hospitais_novos <- 
-  internacoes %>% 
+  internacoes_t %>% 
   janitor::clean_names() %>% 
   filter(morte == 1) %>% 
   mutate(mes_ano = substr(dt_inter, 1, 6),
@@ -567,20 +590,45 @@ O gráfico acima apresenta as internações que tiveram óbito como desfecho.
 
 obitos_total <- 
 obitos_total %>% 
-  group_by(ano, tipo_hosp, municipio_pad) %>% 
+  group_by(ano, tipo_hosp, uf, municipio_pad) %>% 
   summarise(total_obitos = sum(total))
 
-writexl::write_xlsx(obitos_total, "08_obitos_internacoes.xlsx")
+# writexl::write_xlsx(obitos_total, "08_obitos_internacoes.xlsx")
 
 ```
 
 
-## ** Média de duração da internação em UTI Covid-19, por estabelecimento de saúde, conforme os indicadores apontados nas linhas 1 e 2 acima**
+##**Média de duração da internação em UTI Covid-19, por estabelecimento de saúde, conforme os indicadores apontados nas linhas 1 e 2 acima**
 
 ```{r}
 
 dias_hospitais_exist <-
-  internacoes %>% 
+  todas_internacoes %>% 
+  janitor::clean_names() %>% 
+  mutate(mes_ano = substr(dt_inter, 1, 6),
+         mes_ano = lubridate::ym(mes_ano),
+         ano = lubridate::year(mes_ano)) %>% 
+  filter(cnes %in% cnes_2019c) %>% 
+  group_by(ano, uf, municipio_pad) %>% 
+  summarise(dias_medios = round(mean(dias_perm),2)) %>% 
+  mutate(tipo_hosp = "hospitais existentes")
+
+dias_hospitais_novos <- 
+  todas_internacoes %>% 
+  janitor::clean_names() %>% 
+  mutate(mes_ano = substr(dt_inter, 1, 6),
+         mes_ano = lubridate::ym(mes_ano),
+         ano = lubridate::year(mes_ano)) %>% 
+  filter(cnes %ni% cnes_2019c) %>% 
+  group_by(ano, uf, municipio_pad) %>% 
+  summarise(dias_medios = round(mean(dias_perm),2)) %>% 
+  mutate(tipo_hosp = "hospitais novos")
+
+media_dias_hospitais <- rbind(dias_hospitais_exist, 
+                              dias_hospitais_novos)
+
+gi_exist <- 
+  todas_internacoes %>% 
   janitor::clean_names() %>% 
   mutate(mes_ano = substr(dt_inter, 1, 6),
          mes_ano = lubridate::ym(mes_ano),
@@ -590,10 +638,8 @@ dias_hospitais_exist <-
   summarise(dias_medios = round(mean(dias_perm),2)) %>% 
   mutate(tipo_hosp = "hospitais existentes")
 
-
-
-dias_hospitais_novos <- 
-  internacoes %>% 
+gi_novos <- 
+  todas_internacoes %>% 
   janitor::clean_names() %>% 
   mutate(mes_ano = substr(dt_inter, 1, 6),
          mes_ano = lubridate::ym(mes_ano),
@@ -603,10 +649,9 @@ dias_hospitais_novos <-
   summarise(dias_medios = round(mean(dias_perm),2)) %>% 
   mutate(tipo_hosp = "hospitais novos")
 
+gi <- rbind(gi_novos, gi_exist)
 
-media_dias_hospitais <- rbind(dias_hospitais_exist, dias_hospitais_novos)
-
-i <- media_dias_hospitais %>% 
+i <- gi %>% 
   ggplot(aes(x = ano, y = dias_medios,
              fill = tipo_hosp)) + geom_col(position = "dodge") + 
   theme_minimal()
@@ -617,6 +662,10 @@ plotly::ggplotly(i)
 
 Observa-se que, em média, tivemos médias muito próximas, por volta de 8 dias. 
 
+
+```{r}
+# writexl::write_xlsx(media_dias_hospitais, "09_media_internacao.xlsx")
+```
 
 
 
