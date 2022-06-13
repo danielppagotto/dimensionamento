@@ -320,6 +320,27 @@ DT::datatable(df_total)
 Uma vez que se sabe o total de serviços necessários para endereçar a população considerando as taxas de coberturas e parâmetros do Ministério da Saúde, é possível determinar o número de horas necessário por profissional e, consequentemente, o total de profissionais em equivalente tempo integral (ETI). 
 
 
+O tempo dos procedimentos ficarão em uma escala de 20 minutos a 40 minutos. A única referência que acessamos foi... 
+
+```{r}
+
+# assumimos o tempo máximo (40 minutoss, ou 0,66 horas), mas podemos reparametrizar
+
+df_spread <- 
+  df_total %>% 
+  spread(procedimento, total) %>% 
+  mutate(tempo_cirurgico = proced_cirurgia * 0.66,
+         tempo_curativo = proced_curativos * 0.66,
+         tempo_endodontia = proced_endodontia * 0.66, 
+         tempo_periodontia = proced_periodontia * 0.66, 
+         tempo_protese = proced_protese * 0.66)
+
+df_spread[is.na(df_spread)] <- 0
+
+```
+
+Agora é importante estimar o tempo médio de um profissional de saúde bucal ao longo de um ano. Considerando uma carga de trabalho de 40h semanais, temos 160 horas mensais. Considerando uma ausência de 40 dias ao ano devido a férias e outras possíveis ausências (atestados, licenças, atrasos), temos, ao longo de um ano 2600 horas de tempo disponível de um profissional. 
+
 
 
 
