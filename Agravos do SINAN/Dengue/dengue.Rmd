@@ -13,6 +13,11 @@ setwd("~/GitHub/dimensionamento/Agravos do SINAN/Dengue")
 library(tidyverse)
 library(lubridate)
 library(read.dbc)
+library(rio)
+
+install.packages("rio")
+
+
 
 
 
@@ -104,3 +109,52 @@ plotly::ggplotly(a)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+
+
+
+media_precip_GO$Data <- as.Date(media_precip_GO$Data)  
+
+base_go <- bases %>%
+  filter(uf == "Goiás", diagnosticos == "Dengue")
+
+
+base_clima <- media_precip_GO%>%
+  select(Data, media)
+
+
+export (base_go, "bases_go.xlsx")
+
+export (base_clima, "bases_clima.xlsx")
+
+
+
+```
+
+
+```{r}
+
+b <- base_grafico %>% 
+  ggplot(aes(x = mes_ano, y = total)) + geom_col(aes(fill = "Casos de Dengue")) +  theme_minimal() + ggtitle("Número de casos de Dengue em Goiás (SINAN - 2021)")
+
+plotly::ggplotly(b)
+
+
+
+
+```
+
+
+```{r}
+
+c <- base_grafico %>% 
+  ggplot(aes(x = mes_ano, y = media)) + geom_col(aes(fill= " Precipitação Media"))+ theme_minimal() + ggtitle("Precipitação Média em Goiás")
+
+
+plotly::ggplotly(c)
+
+
+
+```
+
