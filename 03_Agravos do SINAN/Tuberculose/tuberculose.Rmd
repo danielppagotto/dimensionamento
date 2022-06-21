@@ -1,0 +1,107 @@
+---
+title: "Tuberculose"
+author: "adaleny paiva"
+date: '2022-06-09'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("~/GitHub/dimensionamento/Agravos do SINAN/Tuberculose")
+
+library(tidyverse)
+library(lubridate)
+library(read.dbc)
+
+
+
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+Não tem a variável de faixa etária no dicionário
+
+```{r cars}
+summary(cars)
+
+Tuberculose <- read.dbc::read.dbc("TUBEBR21.dbc")
+
+df_territorial <- read.csv("https://raw.githubusercontent.com/danielppagotto/dimensionamento/main/Agravos%20do%20SINAN/Animais%20pe%C3%A7onhentos/df_territorial.csv")
+
+df_territorial$cod_municipio <- as.character(df_territorial$cod_municipio)
+
+
+base_tube <- Tuberculose %>%  
+mutate(faixa_etaria = case_when(NU_IDADE_N < 4000 ~ "Menor que 1 ano",
+                                NU_IDADE_N >= 4000 & NU_IDADE_N < 4005 ~ "Entre 1 e 4 anos",                                   NU_IDADE_N >= 4005 & NU_IDADE_N < 4015 ~ "Entre 5 e 14 anos",                                  NU_IDADE_N >= 4015 & NU_IDADE_N < 4025 ~ "Entre 15 e 24 anos", 
+                                NU_IDADE_N >= 4025 & NU_IDADE_N < 4035 ~ "Entre 25 e 34 anos", 
+                                NU_IDADE_N >= 4035 & NU_IDADE_N < 4045 ~ "Entre 35 e 44 anos", 
+                                NU_IDADE_N >= 4045 & NU_IDADE_N < 4055 ~ "Entre 45 e 54 anos", 
+                                NU_IDADE_N >= 4055 & NU_IDADE_N < 4065 ~ "Entre 55 e 64 anos", 
+                                NU_IDADE_N >= 4065 ~ "65 ou mais "))%>%
+mutate(diagnosticos = case_when(BACILOSC_E == 1 ~ "Positiva",
+                                   BACILOSC_E == 2 ~ "Negativa", 
+                                   BACILOSC_E == 3 ~ "Não realizada",
+                                   BACILOSC_E == 4 ~ "Não se aplica" ))%>%
+  mutate(mes_ano = ymd(DT_NOTIFIC),
+           mes_ano = format_ISO8601(mes_ano, precision = "ym"),
+           mes_ano = ym(mes_ano)) %>% 
+    left_join(df_territorial, by = c("ID_MN_RESI" = "cod_municipio"))
+
+glimpse(Tuberculose)
+
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+
+diagnostico <- c("Positiva","Negativa")
+
+funcao_propria <- function(diagnostico){
+
+  base_tube %>% 
+    filter(diagnosticos == diagnostico) %>% 
+    group_by(diagnosticos, uf, mes_ano) %>%
+    summarise(total = n())
+
+}
+
+bases <- tibble()
+
+
+for (diag in diagnostico){
+  
+  intermed <- funcao_propria(diagnostico = diag)
+  bases <- rbind(intermed, bases)
+}
+
+
+```
+
+
+
+```{r}
+
+a <- bases %>% 
+  filter(uf == "Goiás") %>% 
+  ggplot(aes(x = mes_ano, y = total, col = diagnosticos)) + geom_line() +
+  theme_minimal() + ggtitle("Número de casos de tuberculose em Goiás (SINAN - 2021)")
+
+plotly::ggplotly(a)
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
