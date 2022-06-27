@@ -134,7 +134,7 @@ nascimentos_cidade <- df1 %>%
     #mutate(idade = ano_referencia - ANO) %>% 
     left_join(hierarquia_municipios, by = c('CODMUNRES'='cod_municipio')) %>%
     filter(regiao != "NA") %>% 
-    group_by(CODMUNRES,regiao, municipio, ANO) %>% 
+    group_by(CODMUNRES,regiao, uf_sigla, municipio, ANO) %>% 
     summarise(cont_nasc = sum(TOTAL)) 
 
 
@@ -161,6 +161,7 @@ DT::datatable(liquido)
 Vamos dar uma olhada na quantidade de crianças que temos no ano de 2020 por idade e por região. 
 
 ```{r message=FALSE, warning=FALSE}
+
 ano_referencia <- 2020
     
 a <- liquido %>% 
@@ -176,12 +177,91 @@ plotly::ggplotly(a)
 
 ```
 
+Além de observar os serviços programáticos para cada recém-nascido e criança, podemos estimar serviços especializados para casos de doenças congênitas. 
+
+
 # Serviços necessários 
 
+Triagem física = triagem de coração, triagem auditiva e triagem da visão. 
+
+```{r}
+
+servicos_ano_referencia <- 
+  liquido %>% 
+  mutate(proc_consultas = case_when(ANO_NASC == ano_referencia ~ 7,
+                               ANO_NASC == (ano_referencia - 1) ~ 2,
+                               ANO_NASC == (ano_referencia - 3) ~ 1,
+                               TRUE ~ 1),
+         proc_triagem_fisica = if_else(ANO_NASC == ano_referencia, 1, 0),
+         proc_triagem_biologica = if_else(ANO_NASC == ano_referencia, 1, 0,),
+         proc_vacinas = case_when(ANO_NASC == ano_referencia ~ 8, 
+                                       ANO_NASC == (ano_referencia - 1) ~ 1, 
+                                       ANO_NASC == (ano_referencia - 4) ~ 1,
+                                       ANO_NASC == (ano_referencia - 5) ~ 1,
+                                       TRUE ~ 0)) %>% 
+  mutate(qtd_consultas = proc_consultas * qtd_liquido, 
+         qtd_triagem_fisica = proc_triagem_fisica * qtd_liquido, 
+         qtd_vacinas = proc_vacinas * qtd_liquido,
+         qtd_triagem_bio = proc_triagem_biologica * qtd_liquido) 
 
 
 
+```
 
 
+```{r}
+
+qtd_servicos <- 
+  servicos_ano_referencia %>%   
+    group_by(CODMUNRES, uf_sigla, regiao, municipio) %>% 
+    summarise(qtd_liquido = sum(qtd_liquido), 
+              qtd_consultas = sum(qtd_consultas),
+              qtd_triagem_fisica = sum(qtd_triagem_fisica),
+              qtd_vacinas = sum(qtd_vacinas),
+              qtd_triagem_bio = sum(qtd_triagem_bio))
+
+qtd_servicos %>% 
+  ungroup() %>% 
+  select(-CODMUNRES) %>% 
+  DT::datatable()
+
+```
 
 
+# Produtividade 
+
+O tempo de procedimentos é variável. Vamos assumir uma média de valores do tempo. Porém, uma vez implementado, o sistema poderá ser parametrizado. 
+
+
+```{r}
+
+tempo_servicos <- 
+  qtd_servicos %>% 
+    mutate(tempo_consultas = 0.5 * qtd_consultas,
+           tempo_triagem_fisica = 0.66 * qtd_triagem_fisica,
+           tempo_vacinas = 0.25 * qtd_vacinas, 
+           tempo_triagem_bio = 0.25 * qtd_triagem_bio)
+
+```
+
+
+# FTE 
+
+Total de força de trabalho de equivalente. Para isso, adotou-se como referência um profissional que atua com 40h semanais, ou seja, 160h mensais. Considerando um ano de 10 meses anos e meio, devido a férias e eventuais ausências, tem-se um valor de 1680h de profissional por ano.   
+
+```{r}
+fte <- 
+  tempo_servicos %>% 
+  mutate(fte_consultas = round(tempo_consultas/1680, 2), 
+         fte_triagem_fisica = round(tempo_triagem_fisica/1680, 2),
+         fte_triagem_bio = round(tempo_triagem_bio/1680, 2),
+         fte_vacinas = round(tempo_vacinas/1680, 2),
+         fte_total = sum(fte_consultas, fte_triagem_bio, fte_triagem_fisica, fte_vacinas),
+         fte_mensal = round(fte_total/12), 2)
+
+DT::datatable(fte)
+```
+
+# Possíveis avanços 
+
++ Incorporação de serviços relacionados à triagem neonatal 
