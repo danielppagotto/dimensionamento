@@ -66,6 +66,8 @@ nascimentos_go %>%
 nascimentos_go %>% 
   plot_time_series(data, total)
 
+
+# Inicio de funcoes ----------------------------------------------
 # funcao split ---------------------------------------------------
 
 funcao_split <- function(nome_macrorregiao){
@@ -79,7 +81,7 @@ funcao_split <- function(nome_macrorregiao){
   split_macrorregiao <- 
     time_series_split(
       nasc_macrorregiao,
-      assess = "12 months",
+      assess = "42 months",
       cumulative = TRUE
     )
   
@@ -91,39 +93,142 @@ funcao_split <- function(nome_macrorregiao){
   
 }
 
-funcao_split("Macrorregião Centro-Norte")
-splits_regiao_centro_norte <- funcao_split("Macrorregião Centro-Norte")
-
 # funcao treino modelos --------------------------------------------
 
 treino <- function(splits){
 
-model_arima <- arima_reg() %>% 
-  set_engine("auto_arima") %>% 
-  fit(total ~ data, training(splits))
-
-model_prophet <- prophet_reg(seasonality_yearly = TRUE) %>%
-  set_engine("prophet") %>% 
-  fit(total ~ data, training(splits))
-
-model_fit_ets <- exp_smoothing() %>%
-  set_engine(engine = "ets") %>%
-  fit(total ~ data, data = training(splits))
-
-model_tbl <- modeltime_table(
-  model_arima,
-  model_prophet,
-  model_fit_ets
-)
-
-calib_tbl <- model_tbl %>% 
-  modeltime_calibrate(testing(splits))
-
-calib_tbl %>% modeltime_accuracy()
+  model_arima <- arima_reg() %>% 
+    set_engine("auto_arima") %>% 
+    fit(total ~ data, training(splits))
+  
+  model_prophet <- prophet_reg(seasonality_yearly = TRUE) %>%
+    set_engine("prophet") %>% 
+    fit(total ~ data, training(splits))
+  
+  model_fit_ets <- exp_smoothing() %>%
+    set_engine(engine = "ets") %>%
+    fit(total ~ data, data = training(splits))
+  
+  model_tbl <- modeltime_table(
+    model_arima,
+    model_prophet,
+    model_fit_ets
+  )
+  
+  calib_tbl <- model_tbl %>% 
+    modeltime_calibrate(testing(splits))
+  
+  calib_tbl %>% modeltime_accuracy()
+  
+    return(calib_tbl)
 
 }
 
-treino(splits = splits_regiao_centro_norte)
+# Funcao previsao
+
+
+previsao <- function(modelo, split, atual){
+
+  modeltime_forecast(object = modelo,
+                     new_data = testing(split),
+                     actual_data = atual) %>% 
+                     plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+  future_forecast <- 
+    modeltime_refit(object = modelo, atual) %>% 
+    modeltime_forecast(h = "18 months",
+                     actual_data = atual) 
+
+  future_forecast %>% 
+    plot_modeltime_forecast(.conf_interval_show = FALSE)
+  
+  return(future_forecast)
+
+}
+
+# ----------------------------------------------------------------------------------
+
+nascimentos_futuros <- function(objeto, algoritmo, regiao){
+    
+    objeto %>% 
+      filter(.key == "prediction" & .model_desc == algoritmo) %>% 
+      mutate(mes_ano = format(.index, "%Y-%m")) %>% 
+      mutate(ano = year(.index)) %>% 
+      group_by(mes_ano, ano) %>% 
+      summarise(total = sum(.value)) %>% 
+      mutate(tipo = "previsto")%>% 
+      mutate(regiao = regiao)  
+}
+
+nascimentos_atuais <- function(objeto, regiao){
+
+  objeto %>% 
+    filter(.index > "2015-01-01") %>% 
+    filter(.key == "actual") %>% 
+    mutate(mes_ano = format(.index, "%Y-%m")) %>% 
+    mutate(ano = year(.index)) %>% 
+    group_by(mes_ano, ano) %>% 
+    summarise(total = sum(.value)) %>% 
+    mutate(tipo = "atual") %>% 
+    mutate(regiao = regiao)
+}
+
+# Juntando todas a funcoes ----
+
+
+# Fim das funcoes ---------------------------------------------------------
+
+# Aplicando para cada regiao ----
+# Regiao Centro-Norte ----- 
+
+funcao_split("Macrorregião Centro-Norte")
+splits_regiao_centro_norte <- funcao_split("Macrorregião Centro-Norte")
+
+# Selecionando melhor modelo regiao Centro Norte -----
+
+calib_centro_norte <- treino(splits = splits_regiao_centro_norte)
+
+flag <- calib_centro_norte %>% 
+      modeltime_accuracy() %>% 
+      slice(which.min(mape)) %>% 
+      mutate(melhor = case_when(.model_desc == "ARIMA(1,1,1)(0,0,2)[12]" ~ 1,
+                                .model_desc == "PROPHET" ~ 2,
+                                .model_desc == "ETS(A,N,A)" ~ 3)) %>% 
+      select(melhor)
+
+
+
+# Como o ETS foi melhor nesse caso, colocamos 3 no indice da lista
+modelo_centro_norte <- calib_centro_norte[[5]][[flag$melhor]]
+
+modelo_centro_norte %>% 
+  ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
+  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+
+regiao_centro_norte <- nascimentos_go %>% 
+  filter(macrorregiao == "Macrorregião Centro-Norte") %>% 
+  ungroup() %>% 
+  select(-macrorregiao)
+
+centro_norte_future <- 
+  previsao(modelo = calib_centro_norte, split = splits_regiao_centro_norte,
+           atual = regiao_centro_norte)
+
+centro_norte_future %>% 
+  filter(.model_desc == "ETS(A,N,A)" | .model_desc == "ACTUAL") %>% 
+  filter(.index > "2019-01-01") %>% 
+  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
+  theme_minimal()
+
+nascimentos_futuros_centro_norte <- 
+  nascimentos_futuros(objeto = centro_norte_future,
+                      algoritmo = "ETS(A,N,A)", 
+                      regiao = "centro_norte")
+
+nascimentos_atuais_centro_norte <- 
+  nascimentos_atuais(centro_norte_future, regiao = "centro_norte")
+
+
 
 # Previsoes por regioes ---------------------------------------------------
 
