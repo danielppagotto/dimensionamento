@@ -66,111 +66,34 @@ nascimentos_go %>%
 nascimentos_go %>% 
   plot_time_series(data, total)
 
-# split e prophet ---------------------------------------------------------
+# funcao split ---------------------------------------------------
 
-splits <- time_series_split(
-  nascimentos_go,
-  assess = "12 months",
-  cumulative = TRUE
-)
+funcao_split <- function(nome_macrorregiao){
+  
+  nasc_macrorregiao <- 
+    nascimentos_go %>% 
+    filter(macrorregiao == nome_macrorregiao) %>% 
+    ungroup() %>% 
+    select(-macrorregiao)
+  
+  split_macrorregiao <- 
+    time_series_split(
+      nasc_macrorregiao,
+      assess = "12 months",
+      cumulative = TRUE
+    )
+  
+  split_macrorregiao %>% 
+    tk_time_series_cv_plan() %>% 
+    plot_time_series_cv_plan(data, total)
+  
+  return(split_macrorregiao)
+  
+}
 
-splits %>% 
-  tk_time_series_cv_plan() %>% 
-  plot_time_series_cv_plan(data, total)
+funcao_split("Macrorregião Centro-Norte")
 
-splits
-
-# modelos -----------------------------------------------------------------
-
-model_arima <- arima_reg() %>% 
-                set_engine("auto_arima") %>% 
-                fit(total ~ data, training(splits))
-
-model_prophet <- prophet_reg(seasonality_yearly = TRUE) %>%
-                 set_engine("prophet") %>% 
-                 fit(total ~ data, training(splits))
-
-model_fit_ets <- exp_smoothing() %>%
-  set_engine(engine = "ets") %>%
-  fit(total ~ data, data = training(splits))
-
-model_tbl <- modeltime_table(
-  model_arima,
-  model_prophet,
-  model_fit_ets
-)
-
-# Calibrate ---------------------------------------------------------------
-
-calib_tbl <- model_tbl %>% 
-    modeltime_calibrate(testing(splits))
-
-calib_tbl %>% modeltime_accuracy()
-
-prophet_treino <- calib_tbl[[5]][[2]]
-
-prophet_treino %>% 
-  ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
-
-
-# test set visualization --------------------------------------------------
-
-calib_tbl %>% 
-  modeltime_forecast(
-    new_data = testing(splits),
-    actual_data = nascimentos_go
-  ) %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl <- calib_tbl %>% 
-  modeltime_refit(nascimentos_go) %>% 
-  modeltime_forecast(h = "42 months",
-                     actual_data = nascimentos_go)
-
-future_forecast_tbl %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-
-future_forecast_tbl %>% 
-  filter(.model_desc == "PROPHET" | .model_desc == "ACTUAL") %>% 
-  filter(.index > "2019-01-01") %>% 
-  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
-  theme_minimal()
-
-# previsao do numero nascimentos -----------------------------------------------
-
-total_nascimentos_previsao <- 
-  future_forecast_tbl %>% 
-  filter(.key == "prediction" & .model_desc == "PROPHET") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "previs?o")
-
-
-total_nascimentos_atual_recente <- 
-  future_forecast_tbl %>% 
-  filter(.index > "2015-01-01") %>% 
-  filter(.key == "actual") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "atual")
-
-
-#writexl::write_xlsx(total_nascimentos_previsao, "totalnascimentos_go.xlsx")
-
-total_nascimentos <- rbind(total_nascimentos_atual_recente, total_nascimentos_previsao)
-
-
-total_nascimentos %>% 
-  ggplot(aes(mes_ano, total,  group = 1, col = tipo)) + geom_line() + 
-  theme_minimal() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+# funcao previsao -----------------------------------------------
 
 
 
