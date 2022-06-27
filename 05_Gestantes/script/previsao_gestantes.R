@@ -92,11 +92,38 @@ funcao_split <- function(nome_macrorregiao){
 }
 
 funcao_split("Macrorregião Centro-Norte")
+splits_regiao_centro_norte <- funcao_split("Macrorregião Centro-Norte")
 
-# funcao previsao -----------------------------------------------
+# funcao treino modelos --------------------------------------------
 
+treino <- function(splits){
 
+model_arima <- arima_reg() %>% 
+  set_engine("auto_arima") %>% 
+  fit(total ~ data, training(splits))
 
+model_prophet <- prophet_reg(seasonality_yearly = TRUE) %>%
+  set_engine("prophet") %>% 
+  fit(total ~ data, training(splits))
+
+model_fit_ets <- exp_smoothing() %>%
+  set_engine(engine = "ets") %>%
+  fit(total ~ data, data = training(splits))
+
+model_tbl <- modeltime_table(
+  model_arima,
+  model_prophet,
+  model_fit_ets
+)
+
+calib_tbl <- model_tbl %>% 
+  modeltime_calibrate(testing(splits))
+
+calib_tbl %>% modeltime_accuracy()
+
+}
+
+treino(splits = splits_regiao_centro_norte)
 
 # Previsoes por regioes ---------------------------------------------------
 
