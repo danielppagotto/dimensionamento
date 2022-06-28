@@ -6,7 +6,7 @@ library(tidymodels)
 library(timetk)
 library(readxl)
 
-# Inserindo local das bases ----
+# Leitura dos dados ----
 
 municipios_path <- "00_bases/municipio_regiao.csv"
 nascimentos_path <- "00_bases/nascimentos.csv"
@@ -126,7 +126,6 @@ treino <- function(splits){
 
 # Funcao previsao
 
-
 previsao <- function(modelo, split, atual){
 
   modeltime_forecast(object = modelo,
@@ -136,7 +135,7 @@ previsao <- function(modelo, split, atual){
 
   future_forecast <- 
     modeltime_refit(object = modelo, atual) %>% 
-    modeltime_forecast(h = "18 months",
+    modeltime_forecast(h = "42 months",
                      actual_data = atual) 
 
   future_forecast %>% 
@@ -146,7 +145,7 @@ previsao <- function(modelo, split, atual){
 
 }
 
-# ----------------------------------------------------------------------------------
+# Nascimentos futuros e atuais ----
 
 nascimentos_futuros <- function(objeto, algoritmo, regiao){
     
@@ -173,576 +172,89 @@ nascimentos_atuais <- function(objeto, regiao){
     mutate(regiao = regiao)
 }
 
-# Juntando todas a funcoes ----
+# Funcao modelagem ----
+# Juntando todas a funcoes 
 
+modelagem <- function(regiao){
+
+  splits_regiao <- funcao_split(regiao)
+  calib <- treino(splits = splits_regiao)
+  
+  resumo_modelos <- calib %>% 
+                      modeltime_accuracy() 
+  
+  flag <- calib %>% 
+    modeltime_accuracy() %>% 
+    slice(which.min(mape)) %>% 
+    mutate(melhor = case_when(.model_desc == "ARIMA(1,1,1)(0,0,2)[12]" ~ 1,
+                              .model_desc == "PROPHET" ~ 2,
+                              .model_desc == "ETS(A,N,A)" ~ 3)) 
+
+  melhor_modelo <- calib_centro_norte[[5]][[flag$melhor]]
+
+  grafico_melhor <- melhor_modelo %>% 
+    ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
+    geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+
+  nasc_atuais <- nascimentos_go %>% 
+    filter(macrorregiao == regiao) %>% 
+    ungroup() %>% 
+    select(-macrorregiao)
+
+  regiao_future <- 
+    previsao(modelo = calib, split = splits_regiao,
+             atual = nasc_atuais)
+
+  grafico_previsao <- regiao_future %>% 
+    filter(.model_desc == flag$.model_desc | .model_desc == "ACTUAL") %>% 
+    filter(.index > "2019-01-01") %>% 
+    ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
+    theme_minimal()
+
+  nascimentos_futuros_regiao <- 
+    nascimentos_futuros(objeto = regiao_future,
+                        algoritmo = flag$.model_desc, 
+                        regiao = "centro_norte")
+
+  nascimentos_atuais_regiao <- 
+    nascimentos_atuais(regiao_future, regiao = "centro_norte")
+
+  lista <- 
+    list(regiao_future,
+         resumo_modelos,
+         melhor_modelo,
+         grafico_melhor,
+         nascimentos_futuros_regiao,
+         nascimentos_atuais_regiao,
+         grafico_previsao
+       )
+  
+  return(lista)
+  
+}
 
 # Fim das funcoes ---------------------------------------------------------
 
 # Aplicando para cada regiao ----
-# Regiao Centro-Norte ----- 
 
-funcao_split("Macrorregião Centro-Norte")
-splits_regiao_centro_norte <- funcao_split("Macrorregião Centro-Norte")
-
-# Selecionando melhor modelo regiao Centro Norte -----
-
-calib_centro_norte <- treino(splits = splits_regiao_centro_norte)
-
-flag <- calib_centro_norte %>% 
-      modeltime_accuracy() %>% 
-      slice(which.min(mape)) %>% 
-      mutate(melhor = case_when(.model_desc == "ARIMA(1,1,1)(0,0,2)[12]" ~ 1,
-                                .model_desc == "PROPHET" ~ 2,
-                                .model_desc == "ETS(A,N,A)" ~ 3)) %>% 
-      select(melhor)
-
-
-
-# Como o ETS foi melhor nesse caso, colocamos 3 no indice da lista
-modelo_centro_norte <- calib_centro_norte[[5]][[flag$melhor]]
-
-modelo_centro_norte %>% 
-  ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
-
-regiao_centro_norte <- nascimentos_go %>% 
-  filter(macrorregiao == "Macrorregião Centro-Norte") %>% 
-  ungroup() %>% 
-  select(-macrorregiao)
-
-centro_norte_future <- 
-  previsao(modelo = calib_centro_norte, split = splits_regiao_centro_norte,
-           atual = regiao_centro_norte)
-
-centro_norte_future %>% 
-  filter(.model_desc == "ETS(A,N,A)" | .model_desc == "ACTUAL") %>% 
-  filter(.index > "2019-01-01") %>% 
-  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
-  theme_minimal()
-
-nascimentos_futuros_centro_norte <- 
-  nascimentos_futuros(objeto = centro_norte_future,
-                      algoritmo = "ETS(A,N,A)", 
-                      regiao = "centro_norte")
-
-nascimentos_atuais_centro_norte <- 
-  nascimentos_atuais(centro_norte_future, regiao = "centro_norte")
-
-
-
-# Previsoes por regioes ---------------------------------------------------
-
-# macrorregiao centro-oeste -----------------------------------------------------------------
-
-regiao_centro_oeste <- nascimentos_go %>% 
-  filter(macrorregiao == "macrorregião Centro-Oeste") %>% 
-  ungroup() %>% 
-  select(-macrorregiao)
-
-#----------------------------------------------------------------------------------
-splits_regiao_centro_oeste <- time_series_split(
-  regiao_centro_oeste,
-  assess = "12 months",
-  cumulative = TRUE
-)
-
-splits_regiao_centro_oeste %>% 
-  tk_time_series_cv_plan() %>% 
-  plot_time_series_cv_plan(data, total)
-
-splits_regiao_centro_oeste
-
-#----------------------------------------------------------------------------------
-model_arima_regiao_centro_oeste <- arima_reg() %>% 
-  set_engine("auto_arima") %>% 
-  fit(total ~ data, training(splits_regiao_centro_oeste))
-
-model_prophet_regiao_centro_oeste <- prophet_reg(seasonality_yearly = TRUE) %>%
-  set_engine("prophet") %>% 
-  fit(total ~ data, training(splits_regiao_centro_oeste))
-
-model_fit_ets_regiao_centro_oeste <- exp_smoothing() %>%
-  set_engine(engine = "ets") %>%
-  fit(total ~ data, data = training(splits_regiao_centro_oeste))
-
-model_tbl_regiao_centro_oeste <- modeltime_table(
-  model_arima_regiao_centro_oeste,
-  model_prophet_regiao_centro_oeste,
-  model_fit_ets_regiao_centro_oeste
-)
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_centro_oeste <- model_tbl_regiao_centro_oeste %>% 
-  modeltime_calibrate(testing(splits_regiao_centro_oeste))
-
-calib_tbl_regiao_centro_oeste %>% modeltime_accuracy()
-
-prophet_treino_regiao_centro_oeste <- calib_tbl_regiao_centro_oeste[[5]][[3]]
-
-prophet_treino_regiao_centro_oeste %>% 
-  ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_centro_oeste %>% 
-  modeltime_forecast(
-    new_data = testing(splits_regiao_centro_oeste),
-    actual_data = regiao_centro_oeste
-  ) %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_centro_oeste <- calib_tbl_regiao_centro_oeste %>% 
-  modeltime_refit(regiao_centro_oeste) %>% 
-  modeltime_forecast(h = "42 months",
-                     actual_data = regiao_centro_oeste)
-
-future_forecast_tbl_regiao_centro_oeste %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_centro_oeste %>% 
-  filter(.model_desc == "PROPHET" | .model_desc == "ACTUAL") %>% 
-  filter(.index > "2019-01-01") %>% 
-  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
-  theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-total_nascimentos_previsao_regiao_centro_oeste <- 
-  future_forecast_tbl_regiao_centro_oeste %>% 
-  filter(.key == "prediction" & .model_desc == "PROPHET") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "previsto")%>% 
-  mutate(regiao = "centro_oeste")
-
-
-
-total_nascimentos_atual_recente_regiao_centro_oeste <- 
-  future_forecast_tbl_regiao_centro_oeste %>% 
-  filter(.index > "2015-01-01") %>% 
-  filter(.key == "actual") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "atual") %>% 
-  mutate(regiao = "centro_oeste")
-
-
-
-# macrorregiao Sudoeste -----------------------------------------------------------------
-
-regiao_sudoeste <- nascimentos_go %>% 
-  filter(macrorregiao == "Macrorregião Sudoeste") %>% 
-  ungroup() %>% 
-  select(-macrorregiao)
-
-#----------------------------------------------------------------------------------
-splits_regiao_sudoeste <- time_series_split(
-  regiao_sudoeste,
-  assess = "12 months",
-  cumulative = TRUE
-)
-
-splits_regiao_sudoeste %>% 
-  tk_time_series_cv_plan() %>% 
-  plot_time_series_cv_plan(data, total)
-
-splits_regiao_sudoeste
-
-#----------------------------------------------------------------------------------
-model_arima_regiao_sudoeste <- arima_reg() %>% 
-  set_engine("auto_arima") %>% 
-  fit(total ~ data, training(splits_regiao_sudoeste))
-
-model_prophet_regiao_sudoeste <- prophet_reg(seasonality_yearly = TRUE) %>%
-  set_engine("prophet") %>% 
-  fit(total ~ data, training(splits_regiao_sudoeste))
-
-model_fit_ets_regiao_sudoeste <- exp_smoothing() %>%
-  set_engine(engine = "ets") %>%
-  fit(total ~ data, data = training(splits_regiao_sudoeste))
-
-model_tbl_regiao_sudoeste <- modeltime_table(
-  model_arima_regiao_sudoeste,
-  model_prophet_regiao_sudoeste,
-  model_fit_ets_regiao_sudoeste
-)
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_sudoeste <- model_tbl_regiao_sudoeste %>% 
-  modeltime_calibrate(testing(splits_regiao_sudoeste))
-
-calib_tbl_regiao_sudoeste %>% modeltime_accuracy()
-
-prophet_treino_regiao_sudoeste <- calib_tbl_regiao_sudoeste[[5]][[3]]
-
-prophet_treino_regiao_sudoeste %>% 
-  ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_sudoeste %>% 
-  modeltime_forecast(
-    new_data = testing(splits_regiao_sudoeste),
-    actual_data = regiao_sudoeste
-  ) %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_sudoeste <- calib_tbl_regiao_sudoeste %>% 
-  modeltime_refit(regiao_sudoeste) %>% 
-  modeltime_forecast(h = "42 months",
-                     actual_data = regiao_sudoeste)
-
-future_forecast_tbl_regiao_sudoeste %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_sudoeste %>% 
-  filter(.model_desc == "PROPHET" | .model_desc == "ACTUAL") %>% 
-  filter(.index > "2019-01-01") %>% 
-  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
-  theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-total_nascimentos_previsao_regiao_sudoeste <- 
-  future_forecast_tbl_regiao_sudoeste %>% 
-  filter(.key == "prediction" & .model_desc == "PROPHET") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "previs?o")%>% 
-  mutate(regiao = "sudoeste")
-
-total_nascimentos_atual_recente_regiao_sudoeste <- 
-  future_forecast_tbl_regiao_sudoeste %>% 
-  filter(.index > "2015-01-01") %>% 
-  filter(.key == "actual") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "atual") %>% 
-  mutate(regiao = "sudoeste")
-
-
-# macrorregiao Nordeste -----------------------------------------------------------------
-
-regiao_nordeste <- nascimentos_go %>% 
-  filter(macrorregiao == "Macrorregião Nordeste") %>% 
-  ungroup() %>% 
-  select(-macrorregiao)
-
-
-#----------------------------------------------------------------------------------
-splits_regiao_nordeste <- time_series_split(
-  regiao_nordeste,
-  assess = "12 months",
-  cumulative = TRUE
-)
-
-splits_regiao_nordeste %>% 
-  tk_time_series_cv_plan() %>% 
-  plot_time_series_cv_plan(data, total)
-
-splits_regiao_nordeste
-
-#----------------------------------------------------------------------------------
-model_arima_regiao_nordeste <- arima_reg() %>% 
-  set_engine("auto_arima") %>% 
-  fit(total ~ data, training(splits_regiao_nordeste))
-
-model_prophet_regiao_nordeste <- prophet_reg(seasonality_yearly = TRUE) %>%
-  set_engine("prophet") %>% 
-  fit(total ~ data, training(splits_regiao_nordeste))
-
-model_fit_ets_regiao_nordeste <- exp_smoothing() %>%
-  set_engine(engine = "ets") %>%
-  fit(total ~ data, data = training(splits_regiao_nordeste))
-
-model_tbl_regiao_nordeste <- modeltime_table(
-  model_arima_regiao_nordeste,
-  model_prophet_regiao_nordeste,
-  model_fit_ets_regiao_nordeste
-)
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_nordeste <- model_tbl_regiao_nordeste %>% 
-  modeltime_calibrate(testing(splits_regiao_nordeste))
-
-calib_tbl_regiao_nordeste %>% modeltime_accuracy()
-
-prophet_treino_regiao_nordeste <- calib_tbl_regiao_nordeste[[5]][[1]]
-
-prophet_treino_regiao_nordeste %>% 
-  ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_nordeste %>% 
-  modeltime_forecast(
-    new_data = testing(splits_regiao_nordeste),
-    actual_data = regiao_nordeste
-  ) %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_nordeste <- calib_tbl_regiao_nordeste %>% 
-  modeltime_refit(regiao_nordeste) %>% 
-  modeltime_forecast(h = "42 months",
-                     actual_data = regiao_nordeste)
-
-future_forecast_tbl_regiao_nordeste %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_nordeste %>% 
-  filter(.model_desc == "PROPHET" | .model_desc == "ACTUAL") %>% 
-  filter(.index > "2019-01-01") %>% 
-  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
-  theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-total_nascimentos_previsao_regiao_nordeste <- 
-  future_forecast_tbl_regiao_nordeste %>% 
-  filter(.key == "prediction" & .model_desc == "PROPHET") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "previsto")%>% 
-  mutate(regiao = "nordeste")
-
-
-total_nascimentos_atual_recente_regiao_nordeste <- 
-  future_forecast_tbl_regiao_nordeste %>% 
-  filter(.index > "2015-01-01") %>% 
-  filter(.key == "actual") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "atual") %>% 
-  mutate(regiao = "nordeste")
-
-
-# macrorregiao Centro-Norte -----------------------------------------------------------------
-
-regiao_centro_norte <- nascimentos_go %>% 
-  filter(macrorregiao == "Macrorregião Centro-Norte") %>% 
-  ungroup() %>% 
-  select(-macrorregiao)
-
-#----------------------------------------------------------------------------------
-splits_regiao_centro_norte <- time_series_split(
-  regiao_centro_norte,
-  assess = "12 months",
-  cumulative = TRUE
-)
-
-splits_regiao_centro_norte %>% 
-  tk_time_series_cv_plan() %>% 
-  plot_time_series_cv_plan(data, total)
-
-splits_regiao_centro_norte
-
-#----------------------------------------------------------------------------------
-model_arima_regiao_centro_norte <- arima_reg() %>% 
-  set_engine("auto_arima") %>% 
-  fit(total ~ data, training(splits_regiao_centro_norte))
-
-model_prophet_regiao_centro_norte <- prophet_reg(seasonality_yearly = TRUE) %>%
-  set_engine("prophet") %>% 
-  fit(total ~ data, training(splits_regiao_centro_norte))
-
-model_fit_ets_regiao_centro_norte <- exp_smoothing() %>%
-  set_engine(engine = "ets") %>%
-  fit(total ~ data, data = training(splits_regiao_centro_norte))
-
-model_tbl_regiao_centro_norte <- modeltime_table(
-  model_arima_regiao_centro_norte,
-  model_prophet_regiao_centro_norte,
-  model_fit_ets_regiao_centro_norte
-)
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_centro_norte <- model_tbl_regiao_centro_norte %>% 
-  modeltime_calibrate(testing(splits_regiao_centro_norte))
-
-calib_tbl_regiao_centro_norte %>% modeltime_accuracy()
-
-prophet_treino_regiao_centro_norte <- calib_tbl_regiao_centro_norte[[5]][[3]]
-
-prophet_treino_regiao_centro_norte %>% 
-  ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_centro_norte %>% 
-  modeltime_forecast(
-    new_data = testing(splits_regiao_centro_norte),
-    actual_data = regiao_centro_norte
-  ) %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_centro_norte <- calib_tbl_regiao_centro_norte %>% 
-  modeltime_refit(regiao_centro_norte) %>% 
-  modeltime_forecast(h = "42 months",
-                     actual_data = regiao_centro_norte)
-
-future_forecast_tbl_regiao_centro_norte %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_centro_norte %>% 
-  filter(.model_desc == "PROPHET" | .model_desc == "ACTUAL") %>% 
-  filter(.index > "2019-01-01") %>% 
-  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
-  theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-total_nascimentos_previsao_regiao_centro_norte <- 
-  future_forecast_tbl_regiao_centro_norte %>% 
-  filter(.key == "prediction" & .model_desc == "PROPHET") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "previsto") %>% 
-  mutate(regiao = "Centro Norte")
-
-
-total_nascimentos_atual_recente_regiao_centro_norte <- 
-  future_forecast_tbl_regiao_centro_norte %>% 
-  filter(.index > "2015-01-01") %>% 
-  filter(.key == "actual") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "atual") %>% 
-  mutate(regiao = "Centro Norte")
-
-
-# macrorregiao Centro-Sudeste -----------------------------------------------------------------
-
-regiao_centro_sudeste <- nascimentos_go %>% 
-  filter(macrorregiao == "Macrorregião Centro Sudeste") %>% 
-  ungroup() %>% 
-  select(-macrorregiao)
-
-#----------------------------------------------------------------------------------
-splits_regiao_centro_sudeste <- time_series_split(
-  regiao_centro_sudeste,
-  assess = "12 months",
-  cumulative = TRUE
-)
-
-splits_regiao_centro_sudeste %>% 
-  tk_time_series_cv_plan() %>% 
-  plot_time_series_cv_plan(data, total)
-
-splits_regiao_centro_sudeste
-
-#----------------------------------------------------------------------------------
-model_arima_regiao_centro_sudeste <- arima_reg() %>% 
-  set_engine("auto_arima") %>% 
-  fit(total ~ data, training(splits_regiao_centro_sudeste))
-
-model_prophet_regiao_centro_sudeste <- prophet_reg(seasonality_yearly = TRUE) %>%
-  set_engine("prophet") %>% 
-  fit(total ~ data, training(splits_regiao_centro_sudeste))
-
-model_fit_ets_regiao_centro_sudeste <- exp_smoothing() %>%
-  set_engine(engine = "ets") %>%
-  fit(total ~ data, data = training(splits_regiao_centro_sudeste))
-
-model_tbl_regiao_centro_sudeste <- modeltime_table(
-  model_arima_regiao_centro_sudeste,
-  model_prophet_regiao_centro_sudeste,
-  model_fit_ets_regiao_centro_sudeste
-)
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_centro_sudeste <- model_tbl_regiao_centro_sudeste %>% 
-  modeltime_calibrate(testing(splits_regiao_centro_sudeste))
-
-calib_tbl_regiao_centro_sudeste %>% modeltime_accuracy()
-
-prophet_treino_regiao_centro_sudeste <- calib_tbl_regiao_centro_sudeste[[5]][[3]]
-
-prophet_treino_regiao_centro_sudeste %>% 
-  ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-calib_tbl_regiao_centro_sudeste %>% 
-  modeltime_forecast(
-    new_data = testing(splits_regiao_centro_sudeste),
-    actual_data = regiao_centro_sudeste
-  ) %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_centro_sudeste <- calib_tbl_regiao_centro_sudeste %>% 
-  modeltime_refit(regiao_centro_sudeste) %>% 
-  modeltime_forecast(h = "42 months",
-                     actual_data = regiao_centro_sudeste)
-
-future_forecast_tbl_regiao_centro_sudeste %>% 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_centro_sudeste %>% 
-  filter(.model_desc == "PROPHET" | .model_desc == "ACTUAL") %>% 
-  filter(.index > "2019-01-01") %>% 
-  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
-  theme_minimal()
-
-# ----------------------------------------------------------------------------------
-
-total_nascimentos_previsao_regiao_centro_sudeste <- 
-  future_forecast_tbl_regiao_centro_sudeste %>% 
-  filter(.key == "prediction" & .model_desc == "PROPHET") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "previs?o") %>% 
-  mutate(regiao = "Centro Sudeste")
-
-
-total_nascimentos_atual_recente_regiao_centro_sudeste <- 
-  future_forecast_tbl_regiao_centro_sudeste %>% 
-  filter(.index > "2015-01-01") %>% 
-  filter(.key == "actual") %>% 
-  mutate(mes_ano = format(.index, "%Y-%m")) %>% 
-  mutate(ano = year(.index)) %>% 
-  group_by(mes_ano, ano) %>% 
-  summarise(total = sum(.value)) %>% 
-  mutate(tipo = "atual") %>% 
-  mutate(regiao = "Centro Sudeste")
-
+regiao_centro_norte <- modelagem("Macrorregião Centro-Norte")
+regiao_centro_oeste <- modelagem("macrorregião Centro-Oeste")
+regiao_centro_sudeste <- modelagem("Macrorregião Centro Sudeste")
+regiao_nordeste <- modelagem("Macrorregião Nordeste")
+regiao_sudoeste <- modelagem("Macrorregião Sudoeste")
+
+regioes <- c("regiao_centro_norte","regiao_centro_oeste",
+             "regiao_centro_sudeste","regiao_nordeste",
+             "regiao_sudoeste")
+
+previsoes <- tibble()
+
+for(i in regioes){
+  
+  intermed <- i[[5]]
+  previsoes <- rbind(intermed, previsoes)
+  
+}
 
 nascimentos_previsao <- rbind(total_nascimentos_previsao_regiao_centro_norte,
                      total_nascimentos_previsao_regiao_centro_oeste,

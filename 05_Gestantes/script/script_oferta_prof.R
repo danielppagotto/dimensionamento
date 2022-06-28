@@ -52,7 +52,7 @@ oferta_semestral <- oferta %>%
                      quantidade_semanal = fte_liquido/40, 
                      quantidade_mensal = fte_liquido/160,
                      quantidade_mensal = case_when(nivel_atencao == "APS" ~ 0.12 * quantidade_mensal,
-                                                   nivel_atencao == "Atenção Secundária" ~ 0.50 * quantidade_mensal)) %>% 
+                                                   nivel_atencao == "Aten??o Secund?ria" ~ 0.50 * quantidade_mensal)) %>% 
                      rename(fte_semanal = fte) %>% 
               filter(mes_ano > "2016-12-01" & mes_ano < "2022-01-01") %>% 
               left_join(municipios_macrorregiao_saude, by = c("codufmun" = "cod_municipio")) %>% 
@@ -67,13 +67,13 @@ oferta_eaps <- oferta_semestral %>%
   filter(categoria == "Enfermeiro" & nivel_atencao == "APS")
 
 oferta_maps <- oferta_semestral %>% 
-  filter(categoria == "Médico" & nivel_atencao == "APS")
+  filter(categoria == "M?dico" & nivel_atencao == "APS")
 
 oferta_eas <- oferta_semestral %>% 
-  filter(categoria == "Enfermeiro" & nivel_atencao == "Atenção Secundária")
+  filter(categoria == "Enfermeiro" & nivel_atencao == "Aten??o Secund?ria")
 
 oferta_mas <- oferta_semestral %>% 
-  filter(categoria == "Médico" & nivel_atencao == "Atenção Secundária")
+  filter(categoria == "Medico" & nivel_atencao == "Aten??o Secund?ria")
 
 # writexl::write_xlsx(oferta_eaps, "oferta_eaps.xlsx")
 # writexl::write_xlsx(oferta_maps, "oferta_maps.xlsx")
@@ -98,7 +98,7 @@ oferta_t <- oferta %>%
          quantidade_semanal = fte_liquido/40, 
          quantidade_mensal = fte_liquido/160,
          quantidade_mensal = case_when(nivel_atencao == "APS" ~ 0.12 * quantidade_mensal,
-                                       nivel_atencao == "Atenção Secundária" ~ 0.60 * quantidade_mensal)) %>% 
+                                       nivel_atencao == "Aten??o Secund?ria" ~ 0.60 * quantidade_mensal)) %>% 
   rename(fte_semanal = fte) %>% 
   filter(mes_ano > "2016-12-01" & mes_ano < "2022-01-01") %>% 
   left_join(municipios_macrorregiao_saude, by = c("codufmun" = "cod_municipio")) %>% 
@@ -115,19 +115,19 @@ e_aps <- oferta_enf_aps %>%
   ungroup() %>% 
   ggplot(aes(mes_ano, qtd_mensal, col = macrorregiao)) + geom_line(size = 1) +
   theme_minimal() + ggtitle("Enfermeiros na APS") + theme(legend.position='none') + 
-  xlab("Mês e ano") + ylab("Total") 
+  xlab("M?s e ano") + ylab("Total") 
 
-# Médicos  ----------------------------------------------------------------
+# M?dicos  ----------------------------------------------------------------
 
 oferta_medico_aps <- oferta_t %>%  
-  filter(categoria == "Médico" & nivel_atencao == "APS") 
+  filter(categoria == "M?dico" & nivel_atencao == "APS") 
 
 
 writexl::write_xlsx(oferta_medico_aps, "oferta_medicos_aps.xlsx")
 
 
 oferta_medico_as <- oferta_t %>% 
-  filter(categoria == "Médico" & nivel_atencao == "Atenção Secundária")
+  filter(categoria == "M?dico" & nivel_atencao == "Aten??o Secund?ria")
 
 
 writexl::write_xlsx(oferta_medico_as, "oferta_medicos_aps.xlsx")
@@ -137,30 +137,30 @@ m_aps <- oferta_medico_aps %>%
   filter(mes_ano > "2015-12-01" & mes_ano < "2022-01-01") %>% 
   ungroup() %>% 
   ggplot(aes(mes_ano, qtd_mensal, col = macrorregiao)) + geom_line(size = 1) + theme_minimal() + 
-  ggtitle("Médicos na APS") + xlab("Mês e ano") + ylab("Total")
+  ggtitle("M?dicos na APS") + xlab("M?s e ano") + ylab("Total")
 
 
 # SecundÃ¡rio --------------------------------------------------------------
 
 oferta_enf_sec <- oferta_t %>%  
-  filter(categoria == "Enfermeiro" & nivel_atencao == "Atenção Secundária") 
+  filter(categoria == "Enfermeiro" & nivel_atencao == "Aten??o Secund?ria") 
 
 e_as <- oferta_enf_sec %>% 
   filter(mes_ano > "2015-12-01" & mes_ano < "2022-01-01") %>% 
   ungroup() %>% 
   ggplot(aes(mes_ano, qtd_mensal, col = macrorregiao)) + geom_line(size = 1) + theme_minimal() +
-  ggtitle("Enfermeiros obstétricos na Atenção Secundária") + xlab("Mês e ano") + ylab("Total") + 
+  ggtitle("Enfermeiros obst?tricos na Aten??o Secund?ria") + xlab("M?s e ano") + ylab("Total") + 
   theme(legend.position='none')
 
 
 oferta_medico_sec <- oferta_t %>%  
-  filter(categoria == "Médico" & nivel_atencao == "Atenção Secundária") 
+  filter(categoria == "M?dico" & nivel_atencao == "Aten??o Secund?ria") 
 
 m_as <- oferta_medico_sec %>% 
   filter(mes_ano > "2015-12-01" & mes_ano < "2022-01-01") %>% 
   ungroup() %>% 
   ggplot(aes(mes_ano, qtd_mensal, col = macrorregiao)) + geom_line(size = 1) + theme_minimal() + 
-  ggtitle("Médicos Obstétricos na Atenção Secundária") + xlab("Mês e ano") + ylab("Total") + 
+  ggtitle("M?dicos Obst?tricos na Aten??o Secund?ria") + xlab("M?s e ano") + ylab("Total") + 
   theme(legend.position='none')
 
 
