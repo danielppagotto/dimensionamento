@@ -19,7 +19,7 @@ municipio_regiao <- read_csv(municipios_path,
                             janitor::clean_names()
 
 nascimentos <- read_csv(nascimentos_path) %>% 
-               select(-X1) %>% janitor::clean_names()
+               select(-X1) %>% janitor::clean_names() 
 
 regioes_nomes <- read_csv(regioes_path, 
                           col_types = cols(CO_REGSAUD = col_character())) %>% 
@@ -81,7 +81,7 @@ funcao_split <- function(nome_macrorregiao){
   split_macrorregiao <- 
     time_series_split(
       nasc_macrorregiao,
-      assess = "42 months",
+      assess = "12 months",
       cumulative = TRUE
     )
   
@@ -105,14 +105,14 @@ treino <- function(splits){
     set_engine("prophet") %>% 
     fit(total ~ data, training(splits))
   
-  model_fit_ets <- exp_smoothing() %>%
-    set_engine(engine = "ets") %>%
-    fit(total ~ data, data = training(splits))
+ # model_fit_ets <- exp_smoothing() %>%
+   # set_engine(engine = "ets") %>%
+   # fit(total ~ data, data = training(splits))
   
   model_tbl <- modeltime_table(
     model_arima,
     model_prophet,
-    model_fit_ets
+    #model_fit_ets
   )
   
   calib_tbl <- model_tbl %>% 
@@ -150,7 +150,7 @@ previsao <- function(modelo, split, atual){
 nascimentos_futuros <- function(objeto, algoritmo, regiao){
     
     objeto %>% 
-      filter(.key == "prediction" & .model_desc == algoritmo) %>% 
+      filter(.model_id == algoritmo) %>% 
       mutate(mes_ano = format(.index, "%Y-%m")) %>% 
       mutate(ano = year(.index)) %>% 
       group_by(mes_ano, ano) %>% 
@@ -186,11 +186,11 @@ modelagem <- function(regiao){
   flag <- calib %>% 
     modeltime_accuracy() %>% 
     slice(which.min(mape)) %>% 
-    mutate(melhor = case_when(.model_desc == "ARIMA(1,1,1)(0,0,2)[12]" ~ 1,
-                              .model_desc == "PROPHET" ~ 2,
-                              .model_desc == "ETS(A,N,A)" ~ 3)) 
+    mutate(melhor = case_when(.model_id == 1 ~ 1,
+                              .model_id == 2 ~ 2))
+                              #.model_id == 3 ~ 3)) 
 
-  melhor_modelo <- calib_centro_norte[[5]][[flag$melhor]]
+  melhor_modelo <- calib[[5]][[flag$melhor]]
 
   grafico_melhor <- melhor_modelo %>% 
     ggplot(aes(x = data)) + geom_line(aes(y = .actual), col = "blue") +
@@ -206,18 +206,18 @@ modelagem <- function(regiao){
              atual = nasc_atuais)
 
   grafico_previsao <- regiao_future %>% 
-    filter(.model_desc == flag$.model_desc | .model_desc == "ACTUAL") %>% 
+    filter(.model_id == flag$.model_id & .model_desc == "ACTUAL") %>% 
     filter(.index > "2019-01-01") %>% 
     ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
     theme_minimal()
 
   nascimentos_futuros_regiao <- 
     nascimentos_futuros(objeto = regiao_future,
-                        algoritmo = flag$.model_desc, 
-                        regiao = "centro_norte")
+                        algoritmo = flag$.model_id, 
+                        regiao = regiao)
 
   nascimentos_atuais_regiao <- 
-    nascimentos_atuais(regiao_future, regiao = "centro_norte")
+    nascimentos_atuais(regiao_future, regiao = regiao)
 
   lista <- 
     list(regiao_future,
@@ -243,34 +243,51 @@ regiao_centro_sudeste <- modelagem("Macrorregião Centro Sudeste")
 regiao_nordeste <- modelagem("Macrorregião Nordeste")
 regiao_sudoeste <- modelagem("Macrorregião Sudoeste")
 
-regioes <- c("regiao_centro_norte","regiao_centro_oeste",
-             "regiao_centro_sudeste","regiao_nordeste",
-             "regiao_sudoeste")
+# Acessando metricas
 
-previsoes <- tibble()
+metricas_centro_norte <- regiao_centro_norte[[2]]
+metricas_centro_oeste <- regiao_centro_oeste[[2]]
+metricas_centro_sudeste <- regiao_centro_sudeste[[2]]
+metricas_nordeste <- regiao_nordeste[[2]]
+metricas_sudoeste <- regiao_sudoeste[[2]]
 
-for(i in regioes){
+# Acessando as previsoes 
+
+prev_centro_norte <- regiao_centro_norte[[5]]
+prev_centro_oeste <- regiao_centro_oeste[[5]]
+prev_centro_sudeste <- regiao_centro_sudeste[[5]]
+prev_nordeste <- regiao_nordeste[[5]]
+prev_sudoeste <- regiao_sudoeste[[5]]
+
+
+
+nascimentos_previsao <- rbind(prev_centro_norte,
+                              prev_centro_oeste,
+                              prev_centro_sudeste,
+                              prev_nordeste,
+                              prev_sudoeste)
   
-  intermed <- i[[5]]
-  previsoes <- rbind(intermed, previsoes)
-  
-}
-
-nascimentos_previsao <- rbind(total_nascimentos_previsao_regiao_centro_norte,
-                     total_nascimentos_previsao_regiao_centro_oeste,
-                     total_nascimentos_previsao_regiao_centro_sudeste,
-                     total_nascimentos_previsao_regiao_nordeste,
-                     total_nascimentos_previsao_regiao_sudoeste)
-
 nascimentos_previsao$mes_ano_data <- ym(nascimentos_previsao$mes_ano)
 
 nascimentos_previsao %>% 
-  ggplot(aes(x = mes_ano_data, y = total, col = regiao)) + geom_line()
+  ggplot(aes(x = mes_ano_data, y = total, col = regiao)) + geom_line() +
+  theme_minimal() + facet_wrap(~regiao, scales = "free")
 
-# write.csv(nascimentos_previsao, "nascimentos_previsao.csv")
-# writexl::write_xlsx(nascimentos_previsao, "nascimentos_previsao.xlsx")
+nascimentos_previsao %>% 
+  filter(ano > 2021 & ano < 2025) %>% 
+  group_by(ano, regiao) %>% 
+  summarise(total = sum(total)) %>% 
+  ggplot(aes(x = ano, y = total, col = regiao)) + geom_line() +
+  geom_label(aes(label = total)) +
+  theme_minimal() + facet_wrap(~regiao, scales = "free") 
 
+teste<- nascimentos_previsao %>% 
+  filter(ano > 2021 & ano < 2025) %>% 
+  group_by(ano, regiao) %>% 
+  summarise(total = sum(total))
 
+# # write.csv(nascimentos_previsao, "nascimentos_previsao.csv")
+# # writexl::write_xlsx(nascimentos_previsao, "nascimentos_previsao.xlsx")
 
 # Tempos ------------------------------------------------------------------
 
