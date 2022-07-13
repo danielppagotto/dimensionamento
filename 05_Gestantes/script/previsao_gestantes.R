@@ -235,6 +235,9 @@ modelagem <- function(regiao){
 
 # Fim das funcoes ---------------------------------------------------------
 
+ne_split <- funcao_split("Macrorregião Nordeste")
+treino_ne <- treino(ne_split)
+
 # Aplicando para cada regiao ----
 
 regiao_centro_norte <- modelagem("Macrorregião Centro-Norte")

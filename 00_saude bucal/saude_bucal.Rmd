@@ -7,7 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 
-setwd("~/GitHub/dimensionamento/saude bucal")
+setwd("~/GitHub/dimensionamento/00_saude bucal")
 
 
 options(scipen = 999)
@@ -107,6 +107,19 @@ df_sb0_14 <-
 
 DT::datatable(df_sb0_14 %>% select(-starts_with("cobertura")))
 
+demanda <- df_sb0_14 %>% 
+              filter(ano == 2020) %>% 
+              mutate(curativos_horas_anual = (proced_curativos * (1/3)),
+                     curativos_horas_mensal = curativos_horas_anual/12)
+
+
+demanda %>% 
+  select(curativos_horas, endodontia_horas) %>% 
+  gather(key = "procedimento", value = "horas") %>% 
+  ggplot(aes(x = procedimento, y = horas))
+
+
+
 ```
 
 ```{r}
@@ -118,7 +131,7 @@ b <- df_sb0_14 %>%
                names_to = "procedimento",
                values_to = "total",
                ) %>% 
-  ggplot(aes(x = ano, y = total, col = procedimento)) + geom_line() + 
+  ggplot(aes(x = ano, y = total, fill = procedimento)) + geom_col() + 
   facet_wrap(~procedimento, scales = "free_y") +   scale_x_continuous(breaks = seq(2020, 2030, 3)) + 
   theme_minimal()
 
@@ -342,8 +355,35 @@ df_spread[is.na(df_spread)] <- 0
 Agora é importante estimar o tempo médio de um profissional de saúde bucal ao longo de um ano. Considerando uma carga de trabalho de 40h semanais, temos 160 horas mensais. Considerando uma ausência de 40 dias ao ano devido a férias e outras possíveis ausências (atestados, licenças, atrasos), temos, ao longo de um ano 2600 horas de tempo disponível de um profissional. 
 
 
+```{r}
+fts <- 
+sqlQuery(channel, "SELECT CODUFMUN, uf, TP_UNID, COMPETEN, CBO, HORA_AMB, HORAHOSP,                    HORAOUTR 
+                   FROM Dados.cnes.PF 
+                   WHERE substr(COMPETEN, 5, 2) = '12' AND CAST(substr(COMPETEN, 1,                    4) AS INTEGER) = 2020 AND (TP_UNID = '01' OR TP_UNID = '02' OR                     TP_UNID = '40' OR 
+                   TP_UNID = '45' OR TP_UNID = '72')")
+```
 
 
+```{r}
+
+cbo_dentista <- read_delim("GitHub/dimensionamento/00_saude bucal/cbo_dentista.csv", ";", escape_double = FALSE, trim_ws = TRUE)
+
+cbos <- cbo_dentista$codigo
+
+cbo_dentista$codigo <- as.character(cbo_dentista$codigo)
+```
+
+
+```{r}
+fts %>% 
+  filter(CBO %in% cbos) %>%
+  left_join(cbo_dentista, by = c("CBO" = "codigo")) %>% 
+  group_by(uf, tipo_categoria) %>% 
+  mutate(horas = HORA_AMB + HORAHOSP + HORAOUTR) %>% 
+  summarise(total_horas = sum(horas)) %>% 
+  filter(uf == "GO") %>% 
+  mutate(fte40 = total_horas/160)
+```
 
 
 
