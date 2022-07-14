@@ -107,19 +107,6 @@ df_sb0_14 <-
 
 DT::datatable(df_sb0_14 %>% select(-starts_with("cobertura")))
 
-demanda <- df_sb0_14 %>% 
-              filter(ano == 2020) %>% 
-              mutate(curativos_horas_anual = (proced_curativos * (1/3)),
-                     curativos_horas_mensal = curativos_horas_anual/12)
-
-
-demanda %>% 
-  select(curativos_horas, endodontia_horas) %>% 
-  gather(key = "procedimento", value = "horas") %>% 
-  ggplot(aes(x = procedimento, y = horas))
-
-
-
 ```
 
 ```{r}
@@ -132,7 +119,8 @@ b <- df_sb0_14 %>%
                values_to = "total",
                ) %>% 
   ggplot(aes(x = ano, y = total, fill = procedimento)) + geom_col() + 
-  facet_wrap(~procedimento, scales = "free_y") +   scale_x_continuous(breaks = seq(2020, 2030, 3)) + 
+  #facet_wrap(~procedimento, scales = "free_y") +   
+  scale_x_continuous(breaks = seq(2020, 2030, 3)) + 
   theme_minimal()
 
 
@@ -174,8 +162,8 @@ c <- df_sb15_29 %>%
                names_to = "procedimento",
                values_to = "total",
                ) %>% 
-  ggplot(aes(x = ano, y = total, col = procedimento)) + geom_line() + 
-  theme_minimal() + facet_wrap(~procedimento, scales = "free_y") + 
+  ggplot(aes(x = ano, y = total, fill = procedimento)) + geom_col() + 
+  theme_minimal() + #facet_wrap(~procedimento, scales = "free_y") + 
   scale_x_continuous(breaks = seq(2020, 2030, 3))
 
 
@@ -217,8 +205,8 @@ d <- df_sb30_59 %>%
                names_to = "procedimento",
                values_to = "total",
                ) %>% 
-  ggplot(aes(x = ano, y = total, col = procedimento)) + geom_line() + 
-  theme_minimal() + facet_wrap(~procedimento, scales = "free_y") + 
+  ggplot(aes(x = ano, y = total, fill = procedimento)) + geom_col() + 
+  theme_minimal() + #facet_wrap(~procedimento, scales = "free_y") + 
   scale_x_continuous(breaks = seq(2020, 2030, 3))
 
 
@@ -258,8 +246,8 @@ e <- df_sb60 %>%
                names_to = "procedimento",
                values_to = "total",
                ) %>% 
-  ggplot(aes(x = ano, y = total, col = procedimento)) + geom_line() + 
-  theme_minimal() + facet_wrap(~procedimento, scales = "free_y") + 
+  ggplot(aes(x = ano, y = total, fill = procedimento)) + geom_col() + 
+  theme_minimal() + # facet_wrap(~procedimento, scales = "free_y") + 
   scale_x_continuous(breaks = seq(2020, 2030, 3))
 
 
@@ -308,7 +296,9 @@ df_sb15_29t <- df_sb15_29 %>%
 
 df_total <- 
   rbind(df_sb0_14t, df_sb15_29t,
-        df_sb30_59t, df_sb60t)
+        df_sb30_59t, df_sb60t) %>% 
+  mutate(nivel_atencao = if_else(procedimento == "proced_curativos","primario",
+                                 "secundario"))
 
 
 f <- df_total %>%  
@@ -333,7 +323,7 @@ DT::datatable(df_total)
 Uma vez que se sabe o total de serviços necessários para endereçar a população considerando as taxas de coberturas e parâmetros do Ministério da Saúde, é possível determinar o número de horas necessário por profissional e, consequentemente, o total de profissionais em equivalente tempo integral (ETI). 
 
 
-O tempo dos procedimentos ficarão em uma escala de 20 minutos a 40 minutos. A única referência que acessamos foi... 
+O tempo dos procedimentos ficarão em uma escala de 20 minutos a 40 minutos. 
 
 ```{r}
 
@@ -357,7 +347,7 @@ Agora é importante estimar o tempo médio de um profissional de saúde bucal ao
 
 ```{r}
 fts <- 
-sqlQuery(channel, "SELECT CODUFMUN, uf, TP_UNID, COMPETEN, CBO, HORA_AMB, HORAHOSP,                    HORAOUTR 
+sqlQuery(channel, "SELECT CODUFMUN, uf, TP_UNID, COMPETEN, CBO, HORA_AMB, HORAHOSP,                                              HORAOUTR 
                    FROM Dados.cnes.PF 
                    WHERE substr(COMPETEN, 5, 2) = '12' AND CAST(substr(COMPETEN, 1,                    4) AS INTEGER) = 2020 AND (TP_UNID = '01' OR TP_UNID = '02' OR                     TP_UNID = '40' OR 
                    TP_UNID = '45' OR TP_UNID = '72')")
