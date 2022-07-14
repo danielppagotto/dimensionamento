@@ -7,6 +7,9 @@ output: html_document
 
 ```{r setup, include=FALSE}
 
+setwd("~/GitHub/dimensionamento/00_saude bucal")
+
+
 options(scipen = 999)
 
 knitr::opts_chunk$set(
@@ -25,6 +28,8 @@ dremio_uid <- "daniel"
 dremio_pwd <- Sys.getenv("datalake")
 
 channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
+
+
 
 ```
 
@@ -312,7 +317,7 @@ DT::datatable(df_total)
 ```
 
 
-# Calculando Oferta
+
 # Tempo de profissionais 
 
 Uma vez que se sabe o total de serviços necessários para endereçar a população considerando as taxas de coberturas e parâmetros do Ministério da Saúde, é possível determinar o número de horas necessário por profissional e, consequentemente, o total de profissionais em equivalente tempo integral (ETI). 
@@ -321,13 +326,6 @@ Uma vez que se sabe o total de serviços necessários para endereçar a populaç
 O tempo dos procedimentos ficarão em uma escala de 20 minutos a 40 minutos. 
 
 ```{r}
-
-df_total %>% 
-  mutate(tempo_procedimento = case_when(procedimento == "proced_cirurgia" ~ 1,
-                                        procedimento == "proced_curativos" ~ 0.5,
-                                        procedimento == "proced_endodontia" ~ 0.5,
-                                        procedimento == "proced_periodontia" ~ 0.5,
-                                        procedimento == "proced_proteses" ~ 0.66))
 
 # assumimos o tempo máximo (40 minutoss, ou 0,66 horas), mas podemos reparametrizar
 
@@ -347,85 +345,40 @@ df_spread[is.na(df_spread)] <- 0
 Agora é importante estimar o tempo médio de um profissional de saúde bucal ao longo de um ano. Considerando uma carga de trabalho de 40h semanais, temos 160 horas mensais. Considerando uma ausência de 40 dias ao ano devido a férias e outras possíveis ausências (atestados, licenças, atrasos), temos, ao longo de um ano 2600 horas de tempo disponível de um profissional. 
 
 
-Primeiro, por meio dessa consulta vamos acessar todos os profissionais que atuam na atenção primária à saúde.
-
 ```{r}
-
-fts_aps <- 
-sqlQuery(channel, "SELECT CODUFMUN, uf, TP_UNID, COMPETEN, CBO, HORA_AMB, HORAHOSP,                                              HORAOUTR, PROF_SUS
+fts <- 
+sqlQuery(channel, "SELECT CODUFMUN, uf, TP_UNID, COMPETEN, CBO, HORA_AMB, HORAHOSP,                                              HORAOUTR 
                    FROM Dados.cnes.PF 
-                   WHERE substr(COMPETEN, 5, 2) = '12' AND 
-                         uf = 'GO' AND
-                         CAST(substr(COMPETEN, 1, 4) AS INTEGER) = 2020 AND 
-                         (TP_UNID = '01' OR TP_UNID = '02' OR TP_UNID = '40' OR 
-                          TP_UNID = '45' OR TP_UNID = '72')")
-
+                   WHERE substr(COMPETEN, 5, 2) = '12' AND CAST(substr(COMPETEN, 1,                    4) AS INTEGER) = 2020 AND (TP_UNID = '01' OR TP_UNID = '02' OR                     TP_UNID = '40' OR 
+                   TP_UNID = '45' OR TP_UNID = '72')")
 ```
 
 
-Em seguida, vou acessar apenas os CBOs associados à saúde bucal e filtrar 
+```{r}
 
-```{r message=FALSE, warning=FALSE}
-
-path_cbo_dentista <- "cbo_dentista.csv"
-
-cbo_dentista <- read_delim(path_cbo_dentista, ";", escape_double = FALSE, trim_ws = TRUE)
+cbo_dentista <- read_delim("GitHub/dimensionamento/00_saude bucal/cbo_dentista.csv", ";", escape_double = FALSE, trim_ws = TRUE)
 
 cbos <- cbo_dentista$codigo
 
 cbo_dentista$codigo <- as.character(cbo_dentista$codigo)
-
-dentistas_aps <- 
-          fts_aps %>% 
-            filter(CBO %in% cbos) %>%
-            left_join(cbo_dentista, by = c("CBO" = "codigo")) %>% 
-            group_by(uf, tipo_categoria) %>% 
-            mutate(horas = HORA_AMB + HORAHOSP + HORAOUTR) %>% 
-            summarise(total_horas = sum(horas)) %>% 
-            mutate(fte40 = total_horas/160,
-                   horas_anual = total_horas * 12, 
-                   fte40_anual = fte40 * 12,
-                   nivel = "APS")
 ```
 
 
 ```{r}
-
-fts_ae <- 
-  sqlQuery(channel,"SELECT CODUFMUN, uf, TP_UNID, COMPETEN, CBO, 
-                           HORA_AMB, HORAHOSP, HORAOUTR, PROF_SUS
-                     FROM Dados.cnes.PF 
-                     WHERE substr(COMPETEN, 5, 2) = '12' AND
-                          uf = 'GO' AND
-                           CAST(substr(COMPETEN, 1, 4) AS INTEGER) = 2020 AND 
-                           (TP_UNID = '04' OR TP_UNID = '05' OR TP_UNID = '07' OR 
-                            TP_UNID = '15' OR TP_UNID = '22' OR TP_UNID = '36' OR
-                            TP_UNID = '62' OR TP_UNID = '20' OR TP_UNID = '21')")
-
-```
-
-
-Em seguida, vou acessar apenas os CBOs associados à saúde bucal e filtrar 
-
-
-```{r}
-dentistas_ae <- 
-  fts_ae %>% 
+fts %>% 
   filter(CBO %in% cbos) %>%
   left_join(cbo_dentista, by = c("CBO" = "codigo")) %>% 
   group_by(uf, tipo_categoria) %>% 
   mutate(horas = HORA_AMB + HORAHOSP + HORAOUTR) %>% 
   summarise(total_horas = sum(horas)) %>% 
-  mutate(fte40 = total_horas/160,
-         horas_anual = total_horas * 12, 
-         fte40_anual = fte40 * 12,
-         nivel = "AE") 
+  filter(uf == "GO") %>% 
+  mutate(fte40 = total_horas/160)
 ```
 
 
-```{r}
-bases_oferta <- 
-  rbind(dentistas_ae, dentistas_aps)
-```
+
+
+
+
 
 
