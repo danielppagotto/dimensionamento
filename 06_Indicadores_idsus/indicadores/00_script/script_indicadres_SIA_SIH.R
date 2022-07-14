@@ -32,7 +32,11 @@ consulta_sih <-
     FROM Dados.sih.RD
     WHERE (ANO_CMPT = '2020' OR ANO_CMPT = '2021') 
     AND (PROC_REA = '0201010151' OR 
-    PROC_REA = '0201010160')
+         PROC_REA = '0201010160' OR
+         ) AND (COBRANCA = '11' OR
+                COBRANCA = '12') 
     GROUP BY MUNIC_RES"
+
+# AND substr(PROC_REA, 1, 7)
 
 sih <- sqlQuery(channel, consulta_sih)
