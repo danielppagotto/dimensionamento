@@ -9,7 +9,7 @@ dremio_pwd <- Sys.getenv("datalake")
 channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
 
 # Indicador 1 - procedimentos de média complexidade por população ----
-
+# Comentário
 # Baixando dados - SIA-PA ----- 
 
 consulta_sia <- 
