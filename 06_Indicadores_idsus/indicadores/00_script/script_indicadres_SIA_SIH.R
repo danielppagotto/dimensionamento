@@ -59,3 +59,4 @@ consulta2_sih <-
     GROUP BY MUNIC_RES, DT_INTER"
 
 # Érika - continuar preenchendo os intervalos de procedimentos conforme comecei a fazer aqui em cima
+
