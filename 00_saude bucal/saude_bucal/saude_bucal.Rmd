@@ -53,7 +53,7 @@ Para essa metodologia serão necessários dados de população e da cobertura de
 
 ```{r}
 
-df_sb <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."População IBGE por estado e faixa etária selecionada"')
+df_sb <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."População SVS por região de saúde e faixa etária"') %>% filter(ANO == 2021 & uf == "Goiás") 
 
 
 df_cobertura <- read_delim("coberturasb_go.csv", 
@@ -68,7 +68,7 @@ DT::datatable(df_cobertura)
 
 # Prototipação
 
-Para fins de prototipação, vamos pegar só dados de Goiás 
+Para fins de prototipação, vamos pegar só dados de Goiás para 2021
 
 ```{r}
 
@@ -322,30 +322,34 @@ O tempo dos procedimentos ficarão em uma escala de 20 minutos a 40 minutos.
 
 ```{r}
 
-df_total %>% 
+df_total <- 
+  df_total %>% 
   mutate(tempo_procedimento = case_when(procedimento == "proced_cirurgia" ~ 1,
                                         procedimento == "proced_curativos" ~ 0.5,
                                         procedimento == "proced_endodontia" ~ 0.5,
                                         procedimento == "proced_periodontia" ~ 0.5,
-                                        procedimento == "proced_proteses" ~ 0.66))
+                                        procedimento == "proced_protese" ~ 0.66)) %>% 
+  mutate(tempo_total = tempo_procedimento * total)
 
 # assumimos o tempo máximo (40 minutoss, ou 0,66 horas), mas podemos reparametrizar
-
-df_spread <- 
-  df_total %>% 
-  spread(procedimento, total) %>% 
-  mutate(tempo_cirurgico = proced_cirurgia * 0.66,
-         tempo_curativo = proced_curativos * 0.66,
-         tempo_endodontia = proced_endodontia * 0.66, 
-         tempo_periodontia = proced_periodontia * 0.66, 
-         tempo_protese = proced_protese * 0.66)
-
-df_spread[is.na(df_spread)] <- 0
 
 ```
 
 Agora é importante estimar o tempo médio de um profissional de saúde bucal ao longo de um ano. Considerando uma carga de trabalho de 40h semanais, temos 160 horas mensais. Considerando uma ausência de 40 dias ao ano devido a férias e outras possíveis ausências (atestados, licenças, atrasos), temos, ao longo de um ano 2600 horas de tempo disponível de um profissional. 
 
+```{r}
+
+df_total %>% 
+  group_by(ano, nivel_atencao) %>% 
+  summarise(tempo_total = sum(tempo_total, na.rm = TRUE)) %>% 
+  mutate(tempo_total_mensal = tempo_total/12) %>% 
+  mutate(fte_40_anual = tempo_total/2600)
+  
+```
+
+
+
+# Calculando oferta 
 
 Primeiro, por meio dessa consulta vamos acessar todos os profissionais que atuam na atenção primária à saúde.
 
@@ -381,10 +385,10 @@ dentistas_aps <-
             left_join(cbo_dentista, by = c("CBO" = "codigo")) %>% 
             group_by(uf, tipo_categoria) %>% 
             mutate(horas = HORA_AMB + HORAHOSP + HORAOUTR) %>% 
-            summarise(total_horas = sum(horas)) %>% 
-            mutate(fte40 = total_horas/160,
-                   horas_anual = total_horas * 12, 
-                   fte40_anual = fte40 * 12,
+            summarise(total_horas_mensal = 4 * sum(horas)) %>% 
+            mutate(horas_anual = total_horas_mensal * 12, 
+                   fte40_anual = horas_anual/2600,
+                   fte40_mensal = fte40_anual/12,
                    nivel = "APS")
 ```
 
