@@ -58,7 +58,10 @@ Para essa metodologia serão necessários dados de população e da cobertura de
 
 ```{r}
 
-df_sb <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."População IBGE por estado e faixa etária selecionada"')
+df_sb <- sqlQuery(channel, 'SELECT * 
+                            FROM "Analytics Layer".Territorial."População SVS por região de saúde e faixa etária"
+                            WHERE ANO = 2020') %>% 
+         filter(uf == "Goiás")
 
 
 df_cobertura <- read_delim("coberturasb_go.csv", 
@@ -78,10 +81,8 @@ Para fins de prototipação, vamos pegar só dados de Goiás
 ```{r}
 
 a <- df_sb %>%  
-  filter(uf == 'GO') %>% 
-  filter(ano >  2019) %>% 
-  ggplot(aes(x = ano, y = TOTAL, col = FAIXA_ETARIA)) + geom_line(size = 1) + 
-  scale_x_continuous(breaks = seq(2020, 2030, 3)) + theme_minimal()
+  ggplot(aes(x = FAIXA_ETARIA, y = POP, fill = regiao_saude)) + geom_col() +
+  coord_flip() + theme_minimal()
 
 plotly::ggplotly(a)
 
@@ -97,13 +98,11 @@ A cobertura foi estabelecida em 0.24 (24%) visto que, multiplicando-se a taxa de
 
 df_sb0_14 <- 
   df_sb %>% 
-  filter(uf == 'GO') %>% 
   filter(FAIXA_ETARIA == "0 a 14") %>% 
-  mutate(cobertura = TOTAL * 0.24) %>% 
+  mutate(cobertura = POP * 0.24) %>% 
   mutate(proced_curativos = 1.5 * cobertura,
-         cobertura_endodontia = 0.08 * TOTAL,
-         proced_endodontia = 0.1 * cobertura_endodontia) %>% 
-  filter(ano > 2019) 
+         cobertura_endodontia = 0.08 * POP,
+         proced_endodontia = 0.1 * cobertura_endodontia) 
 
 DT::datatable(df_sb0_14 %>% select(-starts_with("cobertura")))
 
@@ -135,19 +134,17 @@ plotly::ggplotly(b)
 
 df_sb15_29 <- 
   df_sb %>% 
-  filter(uf == 'GO') %>% 
   filter(FAIXA_ETARIA == "15 a 29") %>% 
-  mutate(cobertura = TOTAL * 0.24) %>% 
+  mutate(cobertura = POP * 0.24) %>% 
   mutate(proced_curativos = 2.6 * cobertura,
-         cobertura_periodontia = 0.101 * TOTAL,
+         cobertura_periodontia = 0.101 * POP,
          proced_periodontia = 0.10 * cobertura_periodontia, 
-         cobertura_cirurgia = 0.099 * TOTAL,
+         cobertura_cirurgia = 0.099 * POP,
          proced_cirurgia = 0.20 * cobertura_cirurgia,
-         cobertura_endodontia = 0.1 * TOTAL,
+         cobertura_endodontia = 0.1 * POP,
          proced_endodontia = 0.1 * cobertura_endodontia,
-         cobertura_protese = 0.137 * TOTAL,
-         proced_protese = 0.027 * cobertura_protese) %>% 
-  filter(ano > 2019) 
+         cobertura_protese = 0.137 * POP,
+         proced_protese = 0.027 * cobertura_protese) 
 
 DT::datatable(df_sb15_29 %>% select(-starts_with("cobertura")))
 
