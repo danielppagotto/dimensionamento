@@ -20,6 +20,8 @@ channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UI
 
 ```
 
+# Isso é um artefato intermediário da metodologia e se encontra em desenvolvimento. 
+
 ## Contextualização 
 
 Essa linha de cuidado integra a rede de atenção materno-infantil e é uma continuação do que foi implementado na linha da gestante. Optou-se por utilizar um modularização, ou seja, a implementação da linha de cuidado das gestantes e, em sequência, a implementação das etapas de assistência ao recém-nascido e crescimento e desenvolvimento infantil.
