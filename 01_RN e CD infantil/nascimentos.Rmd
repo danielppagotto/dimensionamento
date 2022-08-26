@@ -20,6 +20,11 @@ channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UI
 
 ```
 
+## Contextualização 
+
+Essa linha de cuidado integra a rede de atenção materno-infantil e é uma continuação do que foi implementado na linha da gestante. Optou-se por utilizar um modularização, ou seja, a implementação da linha de cuidado das gestantes e, em sequência, a implementação das etapas de assistência ao recém-nascido e crescimento e desenvolvimento infantil.
+
+
 ## Mapeamento de dados sobre saúde do Recém Nascido (RN) e Criança
 
 A primeira informação relevante que precisamos considerar aqui é o número de RN que teremos por região, no país. A consulta abaixo acessa o datalake para computar o número de nascimentos ao longo dos últimos dez anos no país. 
