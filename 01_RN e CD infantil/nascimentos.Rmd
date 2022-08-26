@@ -1,7 +1,6 @@
 ---
 title: "Cuidados ao RN e Criança"
-author: "Daniel Pagotto"
-date: "13/05/2022"
+author: "Daniel Pagotto, Sheila Mara Pedroza, Erika Aquino"
 output: html_document
 ---
 
