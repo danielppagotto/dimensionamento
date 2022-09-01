@@ -19,18 +19,17 @@ channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UI
 
 ```
 
-# Isso é um artefato intermediário da metodologia e se encontra em desenvolvimento. 
+# Isso é um artefato intermediário da metodologia e se encontra em desenvolvimento.
 
-## Contextualização 
+## Contextualização
 
 Essa linha de cuidado integra a rede de atenção materno-infantil e é uma continuação do que foi implementado na linha da gestante. Optou-se por utilizar um modularização, ou seja, a implementação da linha de cuidado das gestantes e, em sequência, a implementação das etapas de assistência ao recém-nascido e crescimento e desenvolvimento infantil.
 
-
 ## Mapeamento de dados sobre saúde do Recém Nascido (RN) e Criança
 
-A primeira informação relevante que precisamos considerar aqui é o número de RN que teremos por região, no país. A consulta abaixo acessa o datalake para computar o número de nascimentos ao longo dos últimos dez anos no país. 
+A primeira informação relevante que precisamos considerar aqui é o número de RN que teremos por região, no país. A consulta abaixo acessa o datalake para computar o número de nascimentos ao longo dos últimos dez anos no país.
 
-Acessar os últimos dez anos é relevante por permitir que a gente avalie o horizonte temporal completo que inclui os cuidados ao RN e crianças. 
+Acessar os últimos dez anos é relevante por permitir que a gente avalie o horizonte temporal completo que inclui os cuidados ao RN e crianças.
 
 ```{r}
 hierarquia_municipios <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."Municípios - Hierarquia Completa"')
@@ -45,41 +44,41 @@ df1 <- sqlQuery(channel, 'SELECT CODMUNRES, UF, ANO, COUNT(*) AS TOTAL
                             GROUP BY CODMUNRES, UF, ANO')
 ```
 
-Sabe-se que, ao nascer, o RN passará por consultas e alguns testes. Passados três anos, ela passará por uma consulta anual para acompanhar o crescimento. 
+Sabe-se que, ao nascer, o RN passará por consultas e alguns testes. Passados três anos, ela passará por uma consulta anual para acompanhar o crescimento.
 
 A figura abaixo ilustra o racional adotado
 
 ![Figura 1. Racional de análise](00_imagens/captura_rn.PNG)
 
-# Planejamento do serviço 
+# Planejamento do serviço
 
 O planejamento do serviço se dá a partir de algumas orientações, sendo que três dimensões são analisadas: Testes do RN, consultas, imunização
 
 ### Teste do RN
 
-Os testes necessários estão na figura abaixo. 
+Os testes necessários estão na figura abaixo.
 
 ![Figura 2. Testes](00_imagens/testes.PNG)
 
 ### Consultas
 
-A relação de consultas e período adequado para realização estão descritos na figura 3. 
+A relação de consultas e período adequado para realização estão descritos na figura 3.
 
 ![Figura 3. Consultas necessárias por criança](00_imagens/consultas.PNG)
 
-### Imunizações 
+### Imunizações
 
-Ao longo dos primeiros anos de vida, algumas vacinas serão necessárias. 
+Ao longo dos primeiros anos de vida, algumas vacinas serão necessárias.
 
 ![Figura 4. Imunizações](00_imagens/vacinas.PNG)
 
 ### Doenças
 
-Por fim, foram consultados dados sobre a prevalência de doenças em RN, diagnosticadas por meio dos testes feitos nos primeiros dias de vida. 
+Por fim, foram consultados dados sobre a prevalência de doenças em RN, diagnosticadas por meio dos testes feitos nos primeiros dias de vida.
 
 ![Figura 5. Doenças](00_imagens/doencas_incidencia.PNG)
 
-# Análise do total por ano de nascimento 
+# Análise do total por ano de nascimento
 
 Foram consultados dados do número de nascimentos por região
 
@@ -102,8 +101,7 @@ plotly::ggplotly(b)
 
 ```
 
-Todavia, ao longo desse período tivemos óbitos infantis. Por esse motivo, vamos baixar os dados de óbitos, conforme o código abaixo. 
-
+Todavia, ao longo desse período tivemos óbitos infantis. Por esse motivo, vamos baixar os dados de óbitos, conforme o código abaixo.
 
 ```{r}
 obitos_infantis <- sqlQuery(channel, "SELECT CODMUNRES, ANO_OBITO, ANO_NASC, COUNT(*) AS                                           QTD_OBITO FROM(
@@ -119,7 +117,7 @@ obitos_infantis <- sqlQuery(channel, "SELECT CODMUNRES, ANO_OBITO, ANO_NASC, COU
 
 ```
 
-Tendo este dado, vamos deduzir os óbitos infantis que tivemos nesses municípios. Para isso, foi importante desconsiderar alguns registros de acordo com o ano de nascimento. Ex.: Se não houver o tratamento, ao acessar dados de 2015, pegaríamos os óbitos de crianças de 10 anos, por exemplo. No entanto, este caso já não faz parte do horizonte temporal que estamos analisando. 
+Tendo este dado, vamos deduzir os óbitos infantis que tivemos nesses municípios. Para isso, foi importante desconsiderar alguns registros de acordo com o ano de nascimento. Ex.: Se não houver o tratamento, ao acessar dados de 2015, pegaríamos os óbitos de crianças de 10 anos, por exemplo. No entanto, este caso já não faz parte do horizonte temporal que estamos analisando.
 
 ![Figura 6. Racional de análise](00_imagens/racional_dados.PNG)
 
@@ -158,13 +156,13 @@ liquido <- liquido %>%
                 mutate(qtd_liquido = cont_nasc - obitos_ano)
 ```
 
-Tomando o ano de 2020 como referência, podemos ver quantas crianças nós temos em cada município e por cada ano de nascimento. 
+Tomando o ano de 2020 como referência, podemos ver quantas crianças nós temos em cada município e por cada ano de nascimento.
 
 ```{r message=FALSE, warning=FALSE}
 DT::datatable(liquido)
 ```
 
-Vamos dar uma olhada na quantidade de crianças que temos no ano de 2020 por idade e por região. 
+Vamos dar uma olhada na quantidade de crianças que temos no ano de 2020 por idade e por região.
 
 ```{r message=FALSE, warning=FALSE}
 
@@ -183,12 +181,11 @@ plotly::ggplotly(a)
 
 ```
 
-Além de observar os serviços programáticos para cada recém-nascido e criança, podemos estimar serviços especializados para casos de doenças congênitas. 
+Além de observar os serviços programáticos para cada recém-nascido e criança, podemos estimar serviços especializados para casos de doenças congênitas.
 
+# Serviços necessários
 
-# Serviços necessários 
-
-Triagem física = triagem de coração, triagem auditiva e triagem da visão. 
+Triagem física = triagem de coração, triagem auditiva e triagem da visão.
 
 ```{r}
 
@@ -214,7 +211,6 @@ servicos_ano_referencia <-
 
 ```
 
-
 ```{r}
 
 qtd_servicos <- 
@@ -233,11 +229,9 @@ qtd_servicos %>%
 
 ```
 
+# Produtividade
 
-# Produtividade 
-
-O tempo de procedimentos é variável. Vamos assumir uma média de valores do tempo. Porém, uma vez implementado, o sistema poderá ser parametrizado. 
-
+O tempo de procedimentos é variável. Vamos assumir uma média de valores do tempo. Porém, uma vez implementado, o sistema poderá ser parametrizado.
 
 ```{r}
 
@@ -250,10 +244,9 @@ tempo_servicos <-
 
 ```
 
+# FTE
 
-# FTE 
-
-Total de força de trabalho de equivalente. Para isso, adotou-se como referência um profissional que atua com 40h semanais, ou seja, 160h mensais. Considerando um ano de 10 meses anos e meio, devido a férias e eventuais ausências, tem-se um valor de 1680h de profissional por ano.   
+Total de força de trabalho de equivalente. Para isso, adotou-se como referência um profissional que atua com 40h semanais, ou seja, 160h mensais. Considerando um ano de 10 meses anos e meio, devido a férias e eventuais ausências, tem-se um valor de 1680h de profissional por ano.
 
 ```{r}
 fte <- 
@@ -268,6 +261,6 @@ fte <-
 DT::datatable(fte)
 ```
 
-# Possíveis avanços 
+# Possíveis avanços
 
-+ Incorporação de serviços relacionados à triagem neonatal 
+-   Incorporação de serviços relacionados à triagem neonatal
