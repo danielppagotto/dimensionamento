@@ -1,0 +1,220 @@
+---
+title: "Linha de Cuidado - Dengue"
+author: "Daniel Pagotto, Erika Aquino e Sheila Mara Pedroza"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("~/GitHub/dimensionamento/07_dengue")
+library(tidyverse); library(RODBC)
+options(scipen = 999)
+
+dremio_host <- "200.137.215.27"
+dremio_port <- "31010"
+dremio_uid <- "daniel"
+dremio_pwd <- Sys.getenv("datalake")
+
+channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
+
+```
+
+### O presente documento é um artefato intermediário da metodologia que apresenta os cálculos empregados e se encontra **em desenvolvimento**.
+
+# 1) Contextualização
+
+
+A figura 1 ilustra o racional utilizado e tem como principias referências estudos de pesquisadores como [Tomblin Murphy et al. (2016)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5595212/), [Mackenzie et al. (2022)](https://journals.sagepub.com/doi/full/10.1177/08404704221093982?casa_token=P5803jHTk0gAAAAA:1pq-8LmjglfKHUIV7J-xrksXNMInWvaEVtnPvcYciiqZqT0rwNTn_FY5biB03Pg92DD9lkYWTkZVyrxr), [Laurece e Karnon (2017)](https://human-resources-health.biomedcentral.com/articles/10.1186/s12960-017-0216-1), [Asamani, Christmals e Reitsma (2021)](https://www.mdpi.com/1660-4601/18/4/2113/htm)
+
+![Figura 1 - Demanda por serviços](necessidades_demanda.png)
+
+
+
+# 2) Análise de dados notificação da dengue
+
+A primeira informação relevante que precisamos considerar aqui é o número de casos que temos na região de saúde selecionada. A consulta abaixo acessa o datalake para computar o número notificaçoes ao longo do tempo de acordo com registros do Sistema de Informação de Agravo e Notificação (SINAN). 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+df_dengue <- 
+  sqlQuery(channel,'SELECT * FROM "Analytics Layer".Epidemiológico."Casos de Dengue por ano e região de saúde"')
+
+DT::datatable(df_dengue)
+
+```
+
+Observa-se que a coluna `classificacao_final` é formada por múltiplas opções, inclusive por casos notificados, mas posteriormente descartados. 
+
+```{r}
+
+df_dengue %>%  
+  group_by(classificacao_final) %>% 
+  summarise(quantidade = sum(QTD))
+
+```
+
+Seguindo procedimentos adotados por departamentos de vigilância epidemiológica, faremos um recorte entre casos notificados e confirmados. Os primeiros contempla os casos descartados, desconhecidos, ignorados e inconclusivos. 
+
+```{r}
+
+df_dengue_conf_notif <- 
+  df_dengue %>% 
+        mutate(tipo_classificacao = case_when(classificacao_final == "Dengue" ~ "Confirmado",
+                                              classificacao_final == "Dengue com sinais de alarme" ~ "Confirmado",
+                                              classificacao_final == "Dengue grave" ~ "Confirmado",
+                                              TRUE ~ "Notificado"))
+
+df_dengue_conf_notif %>%  
+  group_by(tipo_classificacao) %>% 
+  summarise(quantidade = sum(QTD))
+
+```
+
+Vamos visualizar apenas a evolução de casos no Centro-Oeste para se ter uma compreensão da dinâmica.  
+
+```{r}
+
+a <- df_dengue_conf_notif %>%  
+  group_by(ano_sintomas, uf, tipo_classificacao) %>%
+  summarise(QTD = sum(QTD)) %>% 
+  filter(uf == "Goiás" | uf == "Mato Grosso" |
+         uf == "Mato Grosso do Sul" |
+         uf == "Distrito Federal") %>% 
+  ggplot(aes(x = ano_sintomas, y = QTD, fill = tipo_classificacao)) + 
+  geom_col() + facet_wrap(~uf, scales = "free_y") + theme_minimal() + 
+  xlab("Ano") + xlab("Casos notificados e confirmados") + 
+  ggtitle("Casos notificados e confirmados de Dengue", "Fonte: SINAN")
+  
+plotly::ggplotly(a)
+
+  
+```
+
+
+# 3) Serviços baseados na necessidade 
+
+Vamos acessar apenas uma região de saúde para empregar os cálculos de necessidade, uma vez que a jornada do usuário no Sisdim se dá no nível de análise região de saúde. Além disso, vamos acessar apenas o ano de 2021, pois ainda não temos previsões realizadas. 
+
+```{r}
+
+b <- df_dengue_conf_notif %>% 
+  filter(uf == "Goiás" & regiao_saude_pad == "CENTRAL" & ano_sintomas == 2021) %>% 
+  ggplot(aes(x = fct_reorder(classificacao_final, QTD), y = QTD)) + 
+  geom_col() + coord_flip() + theme_minimal() + 
+  xlab("Classificação") + ylab("Quantidade")
+
+plotly::ggplotly(b)
+
+```
+
+
+De acordo com o mapeamento da jornada do usuário, conforme figura 1, mas também disponível [nesse 
+link](https://cawemo.com/embed/dff9a223-1648-46a8-8f12-dc360cf262b7), o paciente com caso suspeito poderá seguir alguns caminhos. 
+
+![Figura 1 - Jornada do paciente](jornada.png)
+
+Se ele não possuir sinais de alarme ou choque, pode:
+
+  1) ser conduzido à hidratação oral e, posteriormente, retornar ao serviço de saúde no prazo de 3 a 6 dias
+  2) caso possua comorbidades ou prova do laço positiva, ser conduzido à hidratação oral e reavaliação constante em regime ambulatorial ou manutenção em leito de observação. 
+    
+Se o paciente possuir sinais de alarme ou choque, pode: 
+
+  3) Ser acompanhado em leitos de internação por, no mínimo, 48h 
+  4) Ser acompanhado em unidade de internação em regime de tratamento intensivo 
+    
+
+## 3.1) Pressupostos
+
+a) Vamos assumir que todos os casos de dengue, ignorados, descartados e inconclusivos passarão pelo fluxo de número 1, uma vez que se o usuário dá entrada no serviço de saúde, ocorre a notificação - independente se vier a ser confirmada ou não no futuro - e, consequentemente, a assistência mínima. 
+
+b) Vamos assumir, **por enquanto**, que 60% dos pacientes sigam o fluxo 1 e 40% siga o fluxo 2. Ainda vamos estudar formas de determinar melhor o percentual de casos que segue o fluxo 1 e 2. Uma das estratégias é verificar pelo próprio SINAN se o paciente possui comorbidades. Se houver um número muito elevado de casos omissos para essas variáveis no SINAN, outra estratégia é verificar a prevalência de doenças crônicas na população do estado por faixa etária, conforme dados da Pesquisa Nacional de Saúde (PNS), conjugado às idades dos pacientes registrados no SINAN.
+
+c) Os fluxos 3 e 4 devem ser mensurados de modo diferente, possivelmente utilizando como proxy a quantidade de dias em internação. 
+
+d) O SINAN não tem variável que indica a evolução para internação, apenas para óbito. Portanto, a partir dessa base não é possível identificar quais os casos do fluxo 2 evoluem para o fluxo 3
+
+e) Para o presente exemplo vamos assumir alguns tempos, porém, isso será objeto de parametrização do usuário do Sisdim. 
+
+Com base na premissas `a` e `b` assumidas acima, temos a seguinte resultado. Lembrando que vamos assumir que 60% dos 18584 pacientes vão seguir o fluxo 1 e 40% o fluxo 2. 
+
+```{r}
+
+dengue_fluxo <- 
+  df_dengue %>% 
+        filter(uf == "Goiás" & regiao_saude_pad == "CENTRAL" & ano_sintomas == 2021) %>% 
+        mutate(fluxo = case_when(classificacao_final == "Dengue com sinais de alarme" ~ "Fluxo 3",
+                                 classificacao_final == "Dengue grave" ~ "Fluxo 4",
+                                 TRUE ~ "Fluxo 1 ou 2")) %>% 
+        group_by(uf, regiao_saude_pad, fluxo) %>% 
+        summarise(total = sum(QTD))
+        
+dengue_fluxo
+
+```
+
+Com base na premissa `c`, vamos trabalhar inicialmente apenas com os fluxos 1 e 2. Além disso, com base na premissa `e`, os tempos foram assumidos, mas reconfigurações de tempo podem ser realizadas no Sisdim. 
+
+![Figura 3 - Procedimentos necessários](procedimentos.png)
+
+Os procedimentos marcados em amarelo podem ser ajustados também pelo usuário do Sisdim. O hemograma completo do fluxo 1, por exemplo, não é realizado, obrigatoriamente, para todos os casos, ficando a critério do médico. Portanto, assumimos uma frequência de 0.25, ou seja, solicitação de um exame para cada quatro pacientes. Porém, mais um vez, é um parâmetro que pode ser ajustado em sistema.  
+
+```{r}
+
+uf <- c("Goiás", "Goiás")
+regiao <- c("Central", "Central")
+fluxo <- c("fluxo_1", "fluxo_2")
+qtd <- c(18584*0.60, 18584*0.40)
+
+df_servicos <- 
+  tibble(uf, regiao, fluxo, qtd) %>% 
+  mutate(acolhimento = qtd * 1,
+         notificacao = qtd * 1, 
+         consulta_medica = case_when(fluxo == "fluxo_1" ~ qtd * 1,
+                                     fluxo == "fluxo_2" ~ qtd * 1.25),
+         hidratacao = qtd * 1,
+         hemograma = case_when(fluxo == "fluxo_1" ~ qtd * 0.25,
+                               fluxo == "fluxo_2" ~ qtd * 1.25),
+         orientacao_cuidados = qtd * 1, 
+         reavaliacao = case_when(fluxo == "fluxo_1" ~ qtd * 1,
+                                 fluxo == "fluxo_2" ~ qtd * 3),
+         cuidados_leito = case_when(fluxo == "fluxo_1" ~ qtd * 0,
+                                    fluxo == "fluxo_2" ~ qtd * 0.25)) %>% 
+  mutate(tempo_acolhimento = (acolhimento * 30)/60,
+         tempo_notificacao = (notificacao * 5)/60,
+         tempo_consulta_medica = (consulta_medica * 30)/60,
+         tempo_hidratacao = (hidratacao * 20)/60,
+         tempo_hemograma = (hemograma * 15)/60, 
+         tempo_orientacoes = (orientacao_cuidados * 20)/60,
+         tempo_reavaliacao = (reavaliacao * 20)/60,
+         tempo_cuidados_leito = (cuidados_leito * 90)/60) %>% 
+  mutate(tempo_enfermagem = (tempo_acolhimento + tempo_notificacao + 
+                      0.5 * tempo_hidratacao + 0.5 * tempo_orientacoes +
+                      0.5 * tempo_reavaliacao + 0.5 * tempo_cuidados_leito),
+         tempo_tecnico_enfermagem = (0.5 * tempo_hidratacao + 
+                               0.5 * tempo_cuidados_leito), 
+         tempo_medico = (tempo_consulta_medica + 0.5 * tempo_orientacoes + 
+                    0.5 * tempo_reavaliacao),
+         tempo_biomedico = (tempo_hemograma)) %>% 
+  mutate(enfermagem = (tempo_acolhimento + tempo_notificacao + 
+                      0.5 * tempo_hidratacao + 0.5 * tempo_orientacoes +
+                      0.5 * tempo_reavaliacao + 0.5 * tempo_cuidados_leito)/160,
+         tecnico_enfermagem = (0.5 * tempo_hidratacao + 
+                               0.5 * tempo_cuidados_leito)/160, 
+         medico = (tempo_consulta_medica + 0.5 * tempo_orientacoes + 
+                    0.5 * tempo_reavaliacao)/160,
+         biomedico = (tempo_hemograma)/160)
+
+
+writexl::write_xlsx(df_servicos, "servicoes.xlsx")
+
+
+
+```
+
+
+
+
+## 4) Profissionais necessários
+
+
