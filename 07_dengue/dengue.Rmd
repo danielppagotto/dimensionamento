@@ -62,7 +62,7 @@ df_dengue %>%
 
 ```
 
-Seguindo procedimentos adotados por departamentos de vigilância epidemiológica, faremos um recorte entre casos notificados e confirmados. Os primeiros contempla os casos descartados, desconhecidos, ignorados e inconclusivos. 
+Seguindo procedimentos adotados por departamentos de vigilância epidemiológica, faremos um recorte entre casos notificados e confirmados. O primeiro contempla os casos descartados, desconhecidos, ignorados e inconclusivos. 
 
 ```{r}
 
@@ -109,8 +109,10 @@ Vamos acessar apenas uma região de saúde para empregar os cálculos de necessi
 b <- df_dengue_conf_notif %>% 
   filter(uf == "Goiás" & regiao_saude_pad == "CENTRAL" & ano_sintomas == 2021) %>% 
   ggplot(aes(x = fct_reorder(classificacao_final, QTD), y = QTD)) + 
-  geom_col() + coord_flip() + theme_minimal() + 
+  geom_col(fill = "darkblue") + geom_label(aes(label = QTD)) + coord_flip() + theme_minimal() + 
   xlab("Classificação") + ylab("Quantidade")
+
+b
 
 plotly::ggplotly(b)
 
