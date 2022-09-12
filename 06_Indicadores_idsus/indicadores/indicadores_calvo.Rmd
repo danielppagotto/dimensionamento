@@ -168,7 +168,7 @@ No intuito de gerar uma melhor visualização, foi criado um dashboard no Power 
 
 A primeira limitação é o uso de indicadores que podem estar desatualizados, tendo em vista que a fonte foi o censo de 2010. A atualização do próximo censo poderá atualizar esses valores. 
 
-Uma segunda limitação se refere ao uso de apenas dos cinco indicadores extraídos por Calvo et al. (2016). Seria prudente reproduzir todo o fluxo dos pesquisadores a fim de comprovar que a estrutura fatorial se permanece com dados atualizados. 
+Uma segunda limitação se refere ao uso de apenas cinco dos indicadores extraídos por Calvo et al. (2016). Seria prudente reproduzir todo o fluxo dos pesquisadores a fim de comprovar que a estrutura fatorial se permanece com dados atualizados. 
 
 A terceira limitação diz respeito à técnica utilizada por Calvo et al. (2016). Seria interessante avaliar os resultados a partir de uma análise de componentes principais. Apesar desta possuir objetivo semelhante à análise fatorial, ambas se distinguem em termos de procedimentos matemáticos e estatísticos. A análise de componentes principais tem caráter formativo, enquanto a análise fatorial possui caráter reflexivo. A análise fatorial, portanto, é mais indicada para a mensuração de constructos latentes (ex.: fenômenos psicossociais, como depressão). Para mais informações, acessar os materiais de [Damásio (2012)](https://dialnet.unirioja.es/descarga/articulo/6674931.pdf), também abordado no seguinte [vídeo](https://www.youtube.com/watch?v=bfuWasURBM4) de autoria do mesmo autor. 
 

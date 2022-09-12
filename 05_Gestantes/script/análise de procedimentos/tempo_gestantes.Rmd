@@ -1,0 +1,141 @@
+---
+title: "calculando demanda - Gestantes"
+author: "Daniel Pagotto"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+```
+
+
+## Estudo de demanda - gestante
+
+Suponha que a gente tenha 100 nascimentos em um ano. Deste 100, 15 serão de alto risco e 85 serão de risco habital. Por padrão o percentual de alto risco é 15%. Porém, isso pode ser alterado pelo usuário já. 
+
+Cada gestante deverá passar por uma lista de procedimentos. 
+
+```{r}
+
+tempos_procedimentos <- read_excel("~/GitHub/dimensionamento/05_Gestantes/script/análise de procedimentos/tempos_procedimentos.xlsx")
+
+
+```
+
+Existem procedimentos que devem ser realizado para **todas as gestantes** e existem procedimentos que podem ser realizados apenas para gestantes de alto risco. Ou seja, mesmo se ela for alto risco, ela também passará pelos procedimentos da gestante de risco habitual também. 
+
+# Calculando frequência por tipo
+
+Primeiro vamos pegar os procedimentos, independente de quem realiza para vermos o volume necessário, independente das categorias que podem executálo. Observa-se que existem 38 procedimentos, sendo que 13 são exclusivos para a gestante de alto risco e 35 são exclusivos para a gestante de risco habitual. 
+
+```{r}
+
+procedimentos <- 
+  tempos_procedimentos %>% 
+  select(procedimento, tipo_gestante, cod_sigtap, parametro, tempo_medio) %>% 
+  distinct(procedimento, cod_sigtap, .keep_all = TRUE)
+
+procedimentos
+
+```
+
+Vamos calcular o total de procedimentos por tipo de gestante. O parâmetro foi baseado em um conjunto de documentos institucionais. **Não tínhamos o requisito de o usuário modificar esse parâmetro. Se houver um impacto baixo ou médio, seria interessante adicionar, casoa equipe do MS ache interessante.** 
+
+
+```{r}
+
+total_gestantes <- 100
+
+percentual_default_alto <- 0.15
+
+alto_risco <- total_gestantes * percentual_default_alto
+
+procedimentos_freq <- 
+  procedimentos %>% 
+  mutate(frequencia = case_when(tipo_gestante == "Todas as Gestantes" ~ parametro * total_gestantes,
+                                                  TRUE ~ parametro * alto_risco))
+
+procedimentos_freq
+
+```
+
+Vamos calcular o total de tempo necessário por procedimentos. **Lembrando que tempo é um default que o usuário poderá ajustar**. 
+
+```{r}
+
+procedimentos_tempo <- 
+  procedimentos_freq %>% 
+  mutate(tempo_total = tempo_medio * frequencia)
+
+procedimentos_tempo
+
+```
+
+Agora temos que calcular a quantidade de profissionais necessária. Sabemos que um procedimento pode ser realizado por vários profissionais. Vamos dar uma conferida quais os procedimentos temos que mais de um profissional pode atuar. 
+
+```{r}
+
+profissionais_aptos <- 
+  tempos_procedimentos %>% 
+  select(procedimento, cod_sigtap, codigo_familia_cbo, categoria_profissional) %>% 
+  distinct(procedimento, cod_sigtap, codigo_familia_cbo, categoria_profissional)
+
+profissionais_aptos
+
+```
+
+
+Outro requisito que foi **estabelecido no passado era poder excluir algum profissional dessa lista**. 
+
+Vamos fazer uma consulta para entender quantos profissionais podem realizar cada procedimento. Isso auxiliará em determinada etapa.  
+
+```{r}
+
+numero_prof_aptos <- 
+  profissionais_aptos %>% 
+  group_by(procedimento, cod_sigtap) %>% 
+  count() %>% 
+  rename(numero_prof_aptos = n)
+
+numero_prof_aptos
+
+```
+
+Vamos juntar os profissionais a tabela dos tempos de procedimentos e profissionais aptos. 
+
+```{r}
+
+procedimento_profissionais <- 
+  procedimentos_tempo %>% 
+    select(-procedimento) %>% 
+    inner_join(numero_prof_aptos, by = "cod_sigtap") %>% 
+    mutate(tempo_prof = tempo_total/numero_prof_aptos)
+
+procedimento_profissionais
+
+```
+
+
+
+
+
+
+
+
+
+
+
+A carga de trabalho equivalante que vamos usar é de 132h por mês. Esse valor é uma estimativa deduzidas faltas, férias e atrasos. 
+
+
+
+
+
+
+
+
