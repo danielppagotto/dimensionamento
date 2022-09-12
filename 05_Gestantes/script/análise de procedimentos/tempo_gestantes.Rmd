@@ -106,7 +106,7 @@ numero_prof_aptos
 
 ```
 
-Vamos juntar os profissionais a tabela dos tempos de procedimentos e profissionais aptos. 
+Vamos juntar os profissionais a tabela dos tempos de procedimentos e profissionais aptos. A coluna `tempos_prof` serve justamente para saber quanto tempo vamos indicar para cada categoria profissional que pode realizar o procedimento. Nesse caso, temos um cenário equitativo, ou seja, se temos 10 profissionais que podem realizar o procedimento, teremos a distribuição de tempo para 1/10 de cada profissional.
 
 ```{r}
 
@@ -120,8 +120,33 @@ procedimento_profissionais
 
 ```
 
+Agora vamos juntar a tabela de profissionais com a do tempo para cada profissional. Como temos um cenário equitativo, só precisamos fazer uma união para coluna do `código SIGTAP de procedimento`. Caso uma categoria fosse priorizada em relação a outra, teríamos que juntar usando duas variáveis, procedimento e identificação do família de CBO.  
 
 
+```{r}
+
+demanda_prof <- 
+  profissionais_aptos %>% 
+  left_join(procedimento_profissionais, by = "cod_sigtap") %>% 
+  group_by(codigo_familia_cbo, categoria_profissional) %>% 
+  summarise(tempo = sum(tempo_prof)) %>% 
+  mutate(profissionais = tempo/(132 * 12))
+
+demanda_prof
+
+```
+
+Lembrando que estamos falando de um município que tenha 100 nascimentos em um ano. Portanto, a divisão que fizemos acima foi em relação ao tempo para atender esses 100 nascimentos. Portanto, tivemos que dividir o tempo por 132 horas (força de trabalho integral de um profissional, deduzido falta, férias, e outras ausências) e 12 meses. 
+
+```{r}
+a <- demanda_prof %>% 
+  ggplot(aes(x = fct_reorder(categoria_profissional, profissionais), 
+             y = profissionais)) + geom_col() + 
+  coord_flip() + xlab("Profissionais") + ylab("Total de profissionais em tempo integral")
+
+plotly::ggplotly(a)
+
+```
 
 
 
