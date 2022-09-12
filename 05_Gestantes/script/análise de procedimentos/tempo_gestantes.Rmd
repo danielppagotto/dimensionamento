@@ -155,12 +155,4 @@ plotly::ggplotly(a)
 
 
 
-A carga de trabalho equivalante que vamos usar é de 132h por mês. Esse valor é uma estimativa deduzidas faltas, férias e atrasos. 
-
-
-
-
-
-
-
 
