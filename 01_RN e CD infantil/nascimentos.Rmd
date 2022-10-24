@@ -35,16 +35,10 @@ Acessar os últimos dez anos é relevante por permitir que a gente avalie o hori
 hierarquia_municipios <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."Municípios - Hierarquia Completa"')
 
 
-df1 <- sqlQuery(channel, 'SELECT CODMUNRES, UF, ANO, COUNT(*) AS TOTAL
-                            FROM(
-                                  SELECT substr(CODMUNRES, 1, 6) AS CODMUNRES,
-                                          substr(CODMUNRES, 1, 2) AS UF, 
-                                          CAST(substr(DTNASC, 5, 4) AS INT) AS ANO
-                                  FROM Dados.sinasc.DN)
-                            GROUP BY CODMUNRES, UF, ANO')
+df1 <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer"."Epidemiológico".Nascimentos."Nascidos Vivos por mês, ano e município"')
 ```
 
-Sabe-se que, ao nascer, o RN passará por consultas e alguns testes. Passados três anos, ela passará por uma consulta anual para acompanhar o crescimento.
+Sabe-se que, ao nascer, o RN passará por consultas e pela triagem neonatal. Passados três anos, ela passará por uma consulta anual para acompanhar o crescimento.
 
 A figura abaixo ilustra o racional adotado
 
