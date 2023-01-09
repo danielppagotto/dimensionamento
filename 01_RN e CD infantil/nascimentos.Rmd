@@ -6,7 +6,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-setwd("~/GitHub/saude_rn_crianca")
+setwd("~/GitHub/dimensionamento/01_RN e CD infantil")
 library(tidyverse); library(RODBC)
 options(scipen = 999)
 
@@ -19,7 +19,10 @@ channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UI
 
 ```
 
-# Isso é um artefato intermediário da metodologia e se encontra em desenvolvimento.
+# Observações iniciais
+
+- **O presente documento é um artefato intermediário da metodologia e se encontra em desenvolvimento** 
+- **O artefato é uma versão *baseline*, que compreende parte dos procedimentos necessários para atender a população alvo**
 
 ## Contextualização
 
@@ -35,10 +38,28 @@ Acessar os últimos dez anos é relevante por permitir que a gente avalie o hori
 hierarquia_municipios <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."Municípios - Hierarquia Completa"')
 
 
-df1 <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer"."Epidemiológico".Nascimentos."Nascidos Vivos por mês, ano e município"')
+df1 <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer"."Epidemiológico".Nascimentos."Nascidos Vivos por mês, ano e município"', 
+                as.is = TRUE)
+
+df1 <- df1 %>% 
+          rename(mes_ano = ano) %>% 
+          mutate(qtd = as.integer(qtd),
+                 ano = substr(mes_ano, 3, 7),
+                 ano = as.integer(ano)) %>% 
+          mutate(CODMUNRES = as.integer(CODMUNRES))
+
+df2 <- sqlQuery(channel, "
+SELECT ID_CMPT, SUBSTR(ID_CMPT, 1, 4) AS ANO,
+       SG_UF, CD_MUNICIP, SUM(CAST(NR_BENEF_T AS INT)) AS TOTAL_BENEF
+FROM Dados.ans_municipios.tb_bb
+WHERE SG_UF = 'SP' AND SUBSTR(ID_CMPT, 5, 2) = '06'
+GROUP BY ID_CMPT, SG_UF, CD_MUNICIP")
+
 ```
 
-Sabe-se que, ao nascer, o RN passará por consultas e pela triagem neonatal. Passados três anos, ela passará por uma consulta anual para acompanhar o crescimento.
+Sabe-se que, ao nascer, o RN passará por consultas e pela triagem neonatal. 
+
+Passados três anos, ela passará por uma consulta anual para acompanhar o crescimento.
 
 A figura abaixo ilustra o racional adotado
 
@@ -68,7 +89,7 @@ Ao longo dos primeiros anos de vida, algumas vacinas serão necessárias.
 
 ### Doenças
 
-Por fim, foram consultados dados sobre a prevalência de doenças em RN, diagnosticadas por meio dos testes feitos nos primeiros dias de vida.
+Por fim, foram consultados dados sobre a prevalência de doenças em RN, diagnosticadas por meio dos testes feitos nos primeiros dias de vida. Levantamos essa informação, mas não incluímos na metodologa *baseline*.
 
 ![Figura 5. Doenças](00_imagens/doencas_incidencia.PNG)
 
@@ -82,12 +103,12 @@ hierarquia_regioes <- hierarquia_municipios %>%
                                uf, uf_sigla, macrorregiao, regiao_saude) 
 
 b <- df1 %>% 
-    filter(ANO > 2009 & ANO < 2021) %>% 
+    filter(ano > 2009 & ano < 2021) %>% 
     left_join(hierarquia_municipios, by = c('CODMUNRES'='cod_municipio')) %>% 
-    group_by(regiao, ANO) %>% 
-    summarise(cont = sum(TOTAL)) %>% 
+    group_by(regiao, ano) %>% 
+    summarise(cont = sum(qtd)) %>% 
     filter(regiao != "NA") %>% 
-    ggplot(aes(x = ANO, y = cont, col = regiao)) + geom_line() + 
+    ggplot(aes(x = ano, y = cont, col = regiao)) + geom_line() + 
     theme_minimal() + scale_x_continuous(breaks = seq(2010, 2020, 5)) + facet_wrap(~regiao, scales = "free") + theme(legend.position="none")
 
 plotly::ggplotly(b)
@@ -128,18 +149,18 @@ obitos_infantis_t <- obitos_infantis %>%
 
 
 nascimentos_cidade <- df1 %>% 
-    filter(ANO > 2009 & ANO < 2021) %>%
-    #mutate(idade = ano_referencia - ANO) %>% 
+    filter(ano > 2009 & ano < 2021) %>%
+    #mutate(idade = ano_referencia - ano) %>% 
     left_join(hierarquia_municipios, by = c('CODMUNRES'='cod_municipio')) %>%
     filter(regiao != "NA") %>% 
-    group_by(CODMUNRES,regiao, uf_sigla, municipio, ANO) %>% 
-    summarise(cont_nasc = sum(TOTAL)) 
+    group_by(CODMUNRES,regiao, uf_sigla, municipio, ano) %>% 
+    summarise(cont_nasc = sum(qtd)) 
 
 
 liquido <- obitos_infantis_t %>% 
                 left_join(nascimentos_cidade, 
                           by = c("CODMUNRES",
-                                 "ANO_NASC" = "ANO"))
+                                 "ANO_NASC" = "ano"))
 
 liquido$cont_nasc[is.na(liquido$cont_nasc)] <- 0
 
@@ -258,3 +279,24 @@ DT::datatable(fte)
 # Possíveis avanços
 
 -   Incorporação de serviços relacionados à triagem neonatal
+
+
+# Estudo de caso - Goiás 
+
+Vamos fazer uma análise apenas para as regiões de saúde de Goiás em 2020.
+
+```{r}
+
+servicos_go <- 
+  qtd_servicos %>% 
+  left_join(hierarquia_municipios, by = c("CODMUNRES"="cod_municipio")) %>% 
+  filter(cod_uf == 52) %>% 
+  group_by(cod_regsaud, regiao_saude_pad) %>% 
+  summarise(qtd_liquido = sum(qtd_liquido),
+            qtd_consultas = sum(qtd_consultas),
+            qtd_triagem_fisica = sum(qtd_triagem_fisica),
+            qtd_vacinas = sum(qtd_vacinas),
+            qtd_triagem_bio = sum(qtd_triagem_bio))
+
+```
+

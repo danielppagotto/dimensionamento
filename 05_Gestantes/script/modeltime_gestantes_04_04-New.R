@@ -19,7 +19,7 @@ municipio_regiao <- read_csv(municipios_path,
                             janitor::clean_names()
 
 nascimentos <- read_csv(nascimentos_path) %>% 
-               select(-X1) %>% janitor::clean_names()
+               select(-`...1`) %>% janitor::clean_names()
 
 regioes_nomes <- read_csv(regioes_path, 
                           col_types = cols(CO_REGSAUD = col_character())) %>% 

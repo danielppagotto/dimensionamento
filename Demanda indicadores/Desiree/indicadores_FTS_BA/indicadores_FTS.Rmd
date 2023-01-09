@@ -1,0 +1,149 @@
+---
+title: "Consulta FTS - BA"
+author: Daniel Pagotto
+output: html_document
+date: "2022-11-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse); library(RODBC)
+options(scipen = 999)
+
+dremio_host <- "200.137.215.27"
+dremio_port <- "31010"
+dremio_uid <- Sys.getenv("u_datalake")
+dremio_pwd <- Sys.getenv("datalake")
+
+channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
+
+```
+
+# Baixando bases
+
+Vamos baixar algumas bases que vão ser úteis para essa análise: CNES-PF, base de identificação dos municípios, base para identificação do estabelecimento, base de identificação dos CBO. 
+
+```{r}
+
+hierarquia_municipios <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Territorial."Municípios - Hierarquia Completa"',
+                                  as.is = TRUE)
+
+
+cnes_ba <- sqlQuery(channel, "SELECT CNES, CODUFMUN, CBO, NOMEPROF, CNS_PROF,
+                                     PROF_SUS, PROFNSUS, HORAOUTR, HORAHOSP, 
+                                     HORA_AMB 
+                              FROM Dados.cnes.PF
+                              WHERE COMPETEN = '202209' AND 
+                              SUBSTR(CODUFMUN, 1, 2) = '29'", as.is = TRUE)
+
+
+cbo <- sqlQuery(channel, 'SELECT * FROM Dados.cbo2002."ocupacao.parquet"',
+                as.is = TRUE)
+
+
+cadger <- sqlQuery(channel, "SELECT CNES, FANTASIA FROM Dados.cnes.CADGER
+                             WHERE SUBSTR(CODUFMUN, 1, 2) = '29'", as.is = TRUE)
+
+```
+
+# Tratando as bases 
+
+```{r}
+
+cnes_tratado <- 
+  cnes_ba %>% 
+  janitor::clean_names() %>% 
+  left_join(cbo, by = c("cbo"="CODIGO")) %>% 
+  left_join(cadger, by = c("cnes"="CNES")) %>% 
+  left_join(hierarquia_municipios, by = c("codufmun"="cod_municipio")) 
+
+
+# writexl::write_xlsx(cnes_tratado, "cnes_tratado_bruto.xlsx")
+
+
+```
+
+# Agregando por município 
+
+```{r}
+
+municipio <- 
+  cnes_tratado %>% 
+    janitor::clean_names() %>% 
+    mutate(ch_total = horaoutr + horahosp + hora_amb) %>% 
+    group_by(codufmun, uf, macrorregiao, regiao_saude,
+             municipio, prof_sus, cbo, titulo) %>% 
+    summarise(carga_horaria = sum(ch_total)) %>% 
+    mutate(prof_sus = if_else(prof_sus == 1, "SUS", "Nao_SUS")) %>% 
+    spread(prof_sus, carga_horaria) 
+
+
+municipio$Nao_SUS[is.na(municipio$Nao_SUS)] <- 0
+municipio$SUS[is.na(municipio$SUS)] <- 0
+
+
+municipio <- 
+  municipio %>% 
+    mutate(fte40_naoSUS = Nao_SUS/40) %>% 
+    mutate(fte40_SUS = SUS/40) 
+
+
+#writexl::write_xlsx(municipio, "agregado_municipio.xlsx")
+```
+
+# Agregando por região de saúde 
+
+```{r}
+
+regiao_saude <- 
+  cnes_tratado %>% 
+    janitor::clean_names() %>% 
+    mutate(ch_total = horaoutr + horahosp + hora_amb) %>% 
+    group_by(uf, macrorregiao, regiao_saude, prof_sus,
+             cbo, titulo) %>% 
+    summarise(carga_horaria = sum(ch_total)) %>% 
+    mutate(prof_sus = if_else(prof_sus == 1, "SUS", "Nao_SUS")) %>% 
+    spread(prof_sus, carga_horaria) 
+
+
+regiao_saude$Nao_SUS[is.na(regiao_saude$Nao_SUS)] <- 0
+regiao_saude$SUS[is.na(regiao_saude$SUS)] <- 0
+  
+
+regiao_saude <- 
+  regiao_saude %>% 
+    mutate(fte40_naoSUS = Nao_SUS/40) %>% 
+    mutate(fte40_SUS = SUS/40) 
+
+# writexl::write_xlsx(regiao_saude, "agregado_regiao_saude.xlsx")
+```
+
+# Agregando por macrorregião de saúde 
+
+
+```{r}
+
+macrorregiao_saude <- 
+  cnes_tratado %>% 
+    janitor::clean_names() %>% 
+    mutate(ch_total = horaoutr + horahosp + hora_amb) %>% 
+    group_by(uf, macrorregiao, prof_sus,
+             cbo, titulo) %>% 
+    summarise(carga_horaria = sum(ch_total)) %>% 
+    mutate(prof_sus = if_else(prof_sus == 1, "SUS", "Nao_SUS")) %>% 
+    spread(prof_sus, carga_horaria) 
+
+
+macrorregiao_saude$Nao_SUS[is.na(macrorregiao_saude$Nao_SUS)] <- 0
+macrorregiao_saude$SUS[is.na(macrorregiao_saude$SUS)] <- 0
+
+macrorregiao_saude <- 
+  macrorregiao_saude %>% 
+    mutate(fte40_naoSUS = Nao_SUS/40) %>% 
+    mutate(fte40_SUS = SUS/40) 
+
+# writexl::write_xlsx(macrorregiao_saude, "agregado_macrorregiao_saude.xlsx")
+```
+
+
