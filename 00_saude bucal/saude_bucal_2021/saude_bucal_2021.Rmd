@@ -169,6 +169,8 @@ cobertura_proc <-
                    horas_proc_prot = 0.5 * total_proc_prot) %>% 
        mutate(horas_ano = horas_proc_endo + horas_proc_ind + horas_proc_peri + horas_proc_prot)
 
+#writexl::write_xlsx(cobertura_proc, "cobertura_proc_ind.xlsx")
+
       
 ```
 
@@ -188,6 +190,7 @@ fte <-
       mutate(horas_mes = horas_ano/12) %>% 
       mutate(fte40 = horas_mes/132)
      
+# writexl::write_xlsx(fte, "fte40.xlsx")
 
 ```
 
