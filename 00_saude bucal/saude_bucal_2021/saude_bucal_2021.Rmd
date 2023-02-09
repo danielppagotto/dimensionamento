@@ -192,5 +192,9 @@ fte <-
      
 # writexl::write_xlsx(fte, "fte40.xlsx")
 
-```
+DT::datatable(fte)
 
+```
+Os procedimentos coletivos podem ser feitos pelo técnico de saúde bucal, com exceção do exame bucal com finalidade epidemiológica. 
+
+Auxiliar de Consultório Dentário
