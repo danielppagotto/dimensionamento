@@ -1,0 +1,635 @@
+---
+title: "Previsões gestantes"
+author: "Daniel Pagotto e Adaleny Paiva"
+date: "13/02/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+setwd("C:/Users/lapei/Desktop/Faculdade/LAPEI/Dimensionamento/Gestantes")
+
+options(scipen = 999)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+
+
+if (!require(RODBC)) { install.packages(RODBC); require(RODBC) }
+
+dremio_host <- "200.137.215.27"
+dremio_port <- "31010"
+dremio_uid <- "daniel"
+dremio_pwd <- Sys.getenv("datalake")
+
+channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
+
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(modeltime)
+library(timetk)
+library(tidymodels)
+
+```
+
+# Baixando dados 
+
+Primeiro, vamos baixar os dados de nascidos e outras bases que possam contribuir para as análises. 
+
+Vamos, primeiramente, baixar os dados de Goiás e fazer alguns tratamentos (ex.: unir as colunas mês e ano)
+
+```{r}
+nascidos <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer"."Epidemiológico".Nascimentos."Nascidos Vivos por Macrorregião de Saúde"', as.is = TRUE)
+
+nascidos$quantidade <- as.numeric(nascidos$quantidade)
+
+nascidos_go <- nascidos %>% 
+            filter(uf_sigla == "GO") %>% 
+            mutate(mes_ano = paste(mes, ano, sep = ""),
+                   mes_ano = my(mes_ano)) %>% 
+            select(-mes,-ano) %>% 
+            filter(mes_ano < "2022-05-01")
+          
+```
+
+Visualizando o número de nascidos por macrorregião. 
+
+```{r}
+
+a <- nascidos_go21 %>% 
+  ggplot(aes(x = mes_ano, y = quantidade, col = macrorregiao_pad)) + geom_line() + 
+  theme_minimal()
+
+plotly::ggplotly(a)
+
+
+
+```
+
+# Aplicando modeltime na macrorregião Centro-Oeste
+
+Primeiramente, vamos aplicar o modeltime apenas para a macrorregião Centro-Oeste. 
+
+Dividindo a base por treino e teste, usando os últimos 12 meses.  
+
+```{r}
+
+regiao_centro_oeste <- nascidos_go %>% 
+  filter(macrorregiao_pad == "MACRORREGIAO CENTRO-OESTE") %>% 
+  ungroup() %>% 
+  select(-macrorregiao_pad)
+
+splits_regiao_centro_oeste <- time_series_split(
+  regiao_centro_oeste,
+  assess = "16 months",
+  cumulative = TRUE
+)
+
+splits_regiao_centro_oeste %>% 
+  tk_time_series_cv_plan() %>% 
+  plot_time_series_cv_plan(mes_ano, quantidade)
+
+splits_regiao_centro_oeste
+
+```
+
+Treinando modelos 
+
+```{r}
+
+model_arima_regiao_centro_oeste <- arima_reg() %>% 
+  set_engine("auto_arima") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_centro_oeste))
+
+model_prophet_regiao_centro_oeste <- prophet_reg(seasonality_yearly = TRUE) %>%
+  set_engine("prophet") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_centro_oeste))
+
+model_fit_ets_regiao_centro_oeste <- exp_smoothing() %>%
+  set_engine(engine = "ets") %>%
+  fit(quantidade ~ mes_ano, data = training(splits_regiao_centro_oeste))
+
+model_tbl_regiao_centro_oeste <- modeltime_table(
+  model_arima_regiao_centro_oeste,
+  model_prophet_regiao_centro_oeste,
+  model_fit_ets_regiao_centro_oeste
+
+)
+
+```
+
+Vamos avaliar a performance preditiva dos modelos. 
+
+```{r}
+calib_tbl_regiao_centro_oeste <- model_tbl_regiao_centro_oeste %>% 
+  modeltime_calibrate(testing(splits_regiao_centro_oeste))
+
+calib_tbl_regiao_centro_oeste %>% modeltime_accuracy()
+```
+
+De acordo com os resultados dos três algoritmos testados, o ETS possui melhor resultado, com MAPE, MAE e RMSE menores. 
+
+```{r}
+
+ets_treino_regiao_centro_oeste <- calib_tbl_regiao_centro_oeste[[5]][[3]]
+
+ets_treino_regiao_centro_oeste %>% 
+  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
+  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+```
+
+
+```{r}
+calib_tbl_regiao_centro_oeste %>% 
+  modeltime_forecast(
+    new_data = testing(splits_regiao_centro_oeste),
+    actual_data = regiao_centro_oeste
+  ) %>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+```
+
+Apesar do ETS apresentar melhores resultados em termos de métricas, uma inspeção visual sugere a adoção do Prophet, pois o primeiro não está capturando a tendência de queda. 
+
+
+```{r}
+future_forecast_tbl_regiao_centro_oeste <- calib_tbl_regiao_centro_oeste %>% 
+  modeltime_refit(regiao_centro_oeste) %>% 
+  modeltime_forecast(h = "24 months",
+                     actual_data = regiao_centro_oeste)
+
+future_forecast_tbl_regiao_centro_oeste %>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+future_forecast_tbl_regiao_centro_oeste %>% 
+  filter(.model_desc == "PROPHET" | .model_desc == "ACTUAL") %>% 
+  filter(.index > "2019-01-01") %>% 
+  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
+  theme_minimal()
+```
+
+#--------------------------#-----------------------------------#
+
+
+# Aplicando modeltime na macrorregião Nordeste
+
+Dividindo a base por treino e teste, usando os últimos 12 meses.
+
+```{r}
+
+regiao_nordeste <- nascidos_go21 %>% 
+  filter(macrorregiao_pad == "MACRORREGIAO NORDESTE") %>% 
+  ungroup() %>% 
+  select(-macrorregiao_pad)
+
+splits_regiao_nordeste <- time_series_split(
+  regiao_nordeste,
+  assess = "16 months",
+  cumulative = TRUE
+)
+
+splits_regiao_nordeste %>% 
+  tk_time_series_cv_plan() %>% 
+  plot_time_series_cv_plan(mes_ano, quantidade)
+
+splits_regiao_nordeste
+
+
+
+```
+Treinando modelos 
+
+```{r}
+
+model_arima_regiao_nordeste <- arima_reg() %>% 
+  set_engine("auto_arima") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_nordeste))
+
+model_prophet_regiao_nordeste <- prophet_reg(seasonality_yearly = TRUE) %>%
+  set_engine("prophet") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_nordeste))
+
+model_fit_ets_regiao_nordeste <- exp_smoothing() %>%
+  set_engine(engine = "ets") %>%
+  fit(quantidade ~ mes_ano, data = training(splits_regiao_nordeste))
+
+model_tbl_regiao_nordeste <- modeltime_table(
+  model_arima_regiao_nordeste,
+  model_prophet_regiao_nordeste,
+  model_fit_ets_regiao_nordeste
+
+)
+
+```
+
+Vamos avaliar a performance preditiva dos modelos. 
+
+```{r}
+
+calib_tbl_regiao_nordeste <- model_tbl_regiao_nordeste %>% 
+  modeltime_calibrate(testing(splits_regiao_nordeste))
+
+calib_tbl_regiao_nordeste %>% modeltime_accuracy()
+```
+
+De acordo com os resultados dos três algoritmos testados, o ARIMA possui melhor resultado, com MAPE, MAE e RMSE menores.
+
+```{r}
+
+arima_treino_regiao_nordeste <- calib_tbl_regiao_nordeste[[5]][[1]]
+
+arima_treino_regiao_nordeste %>% 
+  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
+  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+
+
+
+```
+
+```{r}
+
+calib_tbl_regiao_nordeste %>% 
+  modeltime_forecast(
+    new_data = testing(splits_regiao_nordeste),
+    actual_data = regiao_nordeste
+  ) %>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+``` 
+
+A ARIMA apresentar melhores resultados em termos de métricas.
+
+```{r}
+
+future_forecast_tbl_regiao_nordeste <- calib_tbl_regiao_nordeste %>% 
+  modeltime_refit(regiao_nordeste) %>% 
+  modeltime_forecast(h = "24 months",
+                     actual_data = regiao_nordeste)
+
+future_forecast_tbl_regiao_nordeste %>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+future_forecast_tbl_regiao_nordeste %>% 
+  filter(.model_desc == "ARIMA" | .model_desc == "ACTUAL") %>% 
+  filter(.index > "2019-01-01") %>% 
+  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
+  theme_minimal()
+
+
+```
+
+# Aplicando modeltime na macrorregião Centro Sudeste
+
+Dividindo a base por treino e teste, usando os últimos 12 meses.
+
+```{r}
+
+
+regiao_centro_sudeste <- nascidos_go21 %>% 
+  filter(macrorregiao_pad == "MACRORREGIAO CENTRO SUDESTE") %>% 
+  ungroup() %>% 
+  select(-macrorregiao_pad)
+
+splits_regiao_centro_sudeste <- time_series_split(
+  regiao_centro_sudeste,
+  assess = "16 months",
+  cumulative = TRUE
+)
+
+splits_regiao_centro_sudeste %>% 
+  tk_time_series_cv_plan() %>% 
+  plot_time_series_cv_plan(mes_ano, quantidade)
+
+splits_regiao_centro_sudeste
+
+
+
+```
+
+Treinando modelos 
+
+``` {r}
+model_arima_regiao_centro_sudeste <- arima_reg() %>% 
+  set_engine("auto_arima") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_centro_sudeste))
+
+model_prophet_regiao_centro_sudeste <- prophet_reg(seasonality_yearly = TRUE) %>%
+  set_engine("prophet") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_centro_sudeste))
+
+model_fit_ets_regiao_centro_sudeste <- exp_smoothing() %>%
+  set_engine(engine = "ets") %>%
+  fit(quantidade ~ mes_ano, data = training(splits_regiao_centro_sudeste))
+
+model_tbl_regiao_centro_sudeste <- modeltime_table(
+  model_arima_regiao_centro_sudeste,
+  model_prophet_regiao_centro_sudeste,
+  model_fit_ets_regiao_centro_sudeste
+
+)
+
+```
+
+Vamos avaliar a performance preditiva dos modelos. 
+
+```{r}
+
+calib_tbl_regiao_centro_sudeste <- model_tbl_regiao_centro_sudeste %>% 
+  modeltime_calibrate(testing(splits_regiao_centro_sudeste))
+
+calib_tbl_regiao_centro_sudeste %>% modeltime_accuracy()
+
+```
+
+De acordo com os resultados dos três algoritmos testados, o ETS possui melhor resultado, com MAPE, MAE e RMSE menores.
+
+```{r}
+
+ets_treino_regiao_centro_sudeste <- calib_tbl_regiao_centro_sudeste[[5]][[3]]
+
+ets_treino_regiao_centro_sudeste %>% 
+  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
+  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+
+```
+
+```{r}
+
+calib_tbl_regiao_centro_sudeste %>% 
+  modeltime_forecast(
+    new_data = testing(splits_regiao_centro_sudeste),
+    actual_data = regiao_centro_sudeste
+  ) %>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+```
+
+A ETS apresentar melhores resultados em termos de métricas.
+
+
+``` {r}
+
+future_forecast_tbl_regiao_centro_sudeste <- calib_tbl_regiao_centro_sudeste %>% 
+  modeltime_refit(regiao_centro_sudeste) %>% 
+  modeltime_forecast(h = "24 months",
+                     actual_data = regiao_centro_sudeste)
+
+future_forecast_tbl_regiao_centro_sudeste%>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+future_forecast_tbl_regiao_centro_sudeste %>% 
+  filter(.model_desc == "ETS" | .model_desc == "ACTUAL") %>% 
+  filter(.index > "2019-01-01") %>% 
+  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
+  theme_minimal()
+
+
+
+```
+
+# Aplicando modeltime na macrorregião Centro norte
+
+Dividindo a base por treino e teste, usando os últimos 12 meses.
+
+```{r}
+
+regiao_centro_norte <- nascidos_go21 %>% 
+  filter(macrorregiao_pad == "MACRORREGIAO CENTRO-NORTE") %>% 
+  ungroup() %>% 
+  select(-macrorregiao_pad)
+
+splits_regiao_centro_norte <- time_series_split(
+  regiao_centro_norte,
+  assess = "16 months",
+  cumulative = TRUE
+)
+
+splits_regiao_centro_norte %>% 
+  tk_time_series_cv_plan() %>% 
+  plot_time_series_cv_plan(mes_ano, quantidade)
+
+splits_regiao_centro_norte
+
+
+
+
+
+```
+Treinando modelos 
+
+```{r}
+
+model_arima_regiao_centro_norte <- arima_reg() %>% 
+  set_engine("auto_arima") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_centro_norte))
+
+model_prophet_regiao_centro_norte <- prophet_reg(seasonality_yearly = TRUE) %>%
+  set_engine("prophet") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_centro_norte))
+
+model_fit_ets_regiao_centro_norte <- exp_smoothing() %>%
+  set_engine(engine = "ets") %>%
+  fit(quantidade ~ mes_ano, data = training(splits_regiao_centro_norte))
+
+model_tbl_regiao_centro_norte <- modeltime_table(
+  model_arima_regiao_centro_norte,
+  model_prophet_regiao_centro_norte,
+  model_fit_ets_regiao_centro_norte
+
+)
+
+```
+
+
+Vamos avaliar a performance preditiva dos modelos. 
+
+```{r}
+
+calib_tbl_regiao_centro_norte <- model_tbl_regiao_centro_norte %>% 
+  modeltime_calibrate(testing(splits_regiao_centro_norte))
+
+calib_tbl_regiao_centro_norte %>% modeltime_accuracy()
+
+
+``` 
+
+
+De acordo com os resultados dos três algoritmos testados, o ETS possui melhor resultado, com MAPE, MAE e RMSE menores.
+
+```{r}
+
+ets_treino_regiao_centro_norte <- calib_tbl_regiao_centro_norte[[5]][[3]]
+
+ets_treino_regiao_centro_norte %>% 
+  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
+  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+
+
+
+```
+
+```{r}
+
+calib_tbl_regiao_centro_norte %>% 
+  modeltime_forecast(
+    new_data = testing(splits_regiao_centro_norte),
+    actual_data = regiao_centro_norte
+  ) %>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+
+```
+
+
+Apesar do ETS apresentar melhores resultados em termos de métricas, uma inspeção visual sugere a adoção do ARIMA, pois o primeiro não está capturando a tendência de queda.
+
+```{r}
+
+#esse me deixou na duvida se o Arima seria melhor que o ETs
+
+future_forecast_tbl_regiao_centro_norte <- calib_tbl_regiao_centro_norte %>% 
+  modeltime_refit(regiao_centro_norte) %>% 
+  modeltime_forecast(h = "24 months",
+                     actual_data = regiao_centro_norte)
+
+future_forecast_tbl_regiao_centro_norte%>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+future_forecast_tbl_regiao_centro_norte %>% 
+  filter(.model_desc == "ARIMA" | .model_desc == "ACTUAL") %>% 
+  filter(.index > "2019-01-01") %>% 
+  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
+  theme_minimal()
+
+
+
+```
+
+
+# Aplicando modeltime na macrorregião Sudoeste
+
+Dividindo a base por treino e teste, usando os últimos 12 meses.
+
+
+```{r}
+
+regiao_sudoeste <- nascidos_go21 %>% 
+  filter(macrorregiao_pad == "MACRORREGIAO SUDOESTE") %>% 
+  ungroup() %>% 
+  select(-macrorregiao_pad)
+
+splits_regiao_sudoeste <- time_series_split(
+  regiao_sudoeste,
+  assess = "16 months",
+  cumulative = TRUE
+)
+
+splits_regiao_sudoeste %>% 
+  tk_time_series_cv_plan() %>% 
+  plot_time_series_cv_plan(mes_ano, quantidade)
+
+splits_regiao_sudoeste
+
+
+
+```
+Treinando modelos 
+
+```{r}
+
+model_arima_regiao_sudoeste <- arima_reg() %>% 
+  set_engine("auto_arima") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_sudoeste))
+
+model_prophet_regiao_sudoeste <- prophet_reg(seasonality_yearly = TRUE) %>%
+  set_engine("prophet") %>% 
+  fit(quantidade ~ mes_ano, training(splits_regiao_sudoeste))
+
+model_fit_ets_regiao_sudoeste <- exp_smoothing() %>%
+  set_engine(engine = "ets") %>%
+  fit(quantidade ~ mes_ano, data = training(splits_regiao_sudoeste))
+
+model_tbl_regiao_sudoeste <- modeltime_table(
+  model_arima_regiao_sudoeste,
+  model_prophet_regiao_sudoeste,
+  model_fit_ets_regiao_sudoeste
+
+) 
+
+
+```
+
+Vamos avaliar a performance preditiva dos modelos.
+
+```{r}
+
+calib_tbl_regiao_sudoeste <- model_tbl_regiao_sudoeste %>% 
+  modeltime_calibrate(testing(splits_regiao_sudoeste))
+
+calib_tbl_regiao_sudoeste %>% modeltime_accuracy()
+
+
+
+```
+
+De acordo com os resultados dos três algoritmos testados, o ETS possui melhor resultado, com MAPE, MAE e RMSE menores.
+
+```{r}
+
+
+ets_treino_regiao_sudoeste <- calib_tbl_regiao_sudoeste[[5]][[3]]
+
+ets_treino_regiao_sudoeste %>% 
+  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
+  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+
+
+
+
+``` 
+```{r}
+
+
+calib_tbl_regiao_sudoeste %>% 
+  modeltime_forecast(
+    new_data = testing(splits_regiao_sudoeste),
+    actual_data = regiao_sudoeste
+  ) %>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+``` 
+
+Apesar do ETS apresentar melhores resultados em termos de métricas.
+
+```{r}
+
+future_forecast_tbl_regiao_sudoeste <- calib_tbl_regiao_sudoeste %>% 
+  modeltime_refit(regiao_sudoeste) %>% 
+  modeltime_forecast(h = "24 months",
+                     actual_data = regiao_sudoeste)
+
+future_forecast_tbl_regiao_sudoeste%>% 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+future_forecast_tbl_regiao_sudoeste %>% 
+  filter(.model_desc == "ETS" | .model_desc == "ACTUAL") %>% 
+  filter(.index > "2019-01-01") %>% 
+  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
+  theme_minimal()
+
+
+
+``` 
+
