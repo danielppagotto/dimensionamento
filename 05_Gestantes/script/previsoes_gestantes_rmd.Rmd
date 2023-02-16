@@ -494,8 +494,6 @@ Apesar do ETS apresentar melhores resultados em termos de métricas, uma inspeç
 
 ```{r}
 
-#esse me deixou na duvida se o Arima seria melhor que o ETs
-
 future_forecast_tbl_regiao_centro_norte <- calib_tbl_regiao_centro_norte %>% 
   modeltime_refit(regiao_centro_norte) %>% 
   modeltime_forecast(h = "24 months",
