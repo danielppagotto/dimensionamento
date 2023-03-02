@@ -1,0 +1,33 @@
+---
+title: "sisab"
+format: html
+editor: visual
+---
+
+## Tratamento dados APS
+
+O objetivo do presente script é realizar um tratamento para juntar as contendo população vulnerável e população vinculada à APS em cada município. 
+
+```{r}
+library(readxl)
+
+cadastro_pop_sisab <- read_excel("bases/cadastro_pop_sisab.xls")
+
+cadastro_pop_sisab$CNES <- as.integer(cadastro_pop_sisab$CNES)
+
+pop_vulneravel_previne_202212 <- read_excel("bases/pop_vulneravel_previne_202212.xlsx", 
+    col_types = c("text", "text", "text", 
+        "text", "text", "numeric", "text", 
+        "text", "text", "text", "text", "numeric", 
+        "text", "text", "text", "numeric", 
+        "numeric", "text", "text", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric"))
+
+
+```
+
+
+Juntando as duas bases 
+
+
