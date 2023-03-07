@@ -14,7 +14,7 @@ O objetivo do presente script é realizar um tratamento para juntar as contendo 
 library(tidyverse)
 library(readxl)
 
-cadastro_pop_sisab <- read_excel("bases/cadastro_pop_sisab.xls")
+cadastro_pop_sisab <- read_excel("bases/cadastro-individual_aps.xls")
 
 cadastro_pop_sisab$CNES <- as.integer(cadastro_pop_sisab$CNES)
 
@@ -82,7 +82,7 @@ equipes <-
            tecnicos = 2 * equipes,
            acs = pop_vinc/750)
 
-#writexl::write_xlsx(equipes, 'equipes.xlsx')
+# writexl::write_xlsx(equipes, 'equipes.xlsx')
 
 ```
 
