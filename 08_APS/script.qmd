@@ -106,5 +106,12 @@ prof_municipio <-
 
 
 
+```{r}
+
+teste_go <- teste %>% 
+              group_by(uf, municipio) %>% 
+              count()
+
+```
 
 
