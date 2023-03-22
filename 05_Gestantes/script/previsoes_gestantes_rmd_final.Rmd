@@ -7,8 +7,6 @@ output: html_document
 
 ```{r setup, include=FALSE}
 
-setwd("C:/Users/lapei/Desktop/Faculdade/LAPEI/Dimensionamento/Gestantes")
-
 options(scipen = 999)
 
 knitr::opts_chunk$set(
@@ -36,6 +34,29 @@ library(tidymodels)
 
 ```
 
+# Trazendo dados da MLP
+
+Trazendo os dados de MLP treinados pelo Diogo
+
+```{r}
+
+resultados_mlp_prophet <- read_csv("resultados_mlp_prophet.csv")
+
+resultados_mlp <- 
+  resultados_mlp_prophet %>% 
+    filter(model == 'mlp') %>% 
+    select(-`...1`) %>% 
+    mutate(mes_ano = my(mes_ano)) %>% 
+    mutate(macrorregiao_pad = case_when(codibge == 5206 ~ 'MACRORREGIAO SUDOESTE',
+                                        codibge == 5207 ~ 'MACRORREGIAO NORDESTE',
+                                        codibge == 5208 ~ 'MACRORREGIAO CENTRO-OESTE',
+                                        codibge == 5209 ~ 'MACRORREGIAO CENTRO-NORTE',
+                                        codibge == 5210 ~ 'MACRORREGIAO CENTRO SUDESTE'))
+
+```
+
+
+
 # Baixando dados 
 
 Primeiro, vamos baixar os dados de nascidos e outras bases que possam contribuir para as análises. 
@@ -52,7 +73,7 @@ nascidos_go <- nascidos %>%
             mutate(mes_ano = paste(mes, ano, sep = ""),
                    mes_ano = my(mes_ano)) %>% 
             select(-mes,-ano) %>% 
-            filter(mes_ano < "2022-05-01")
+            filter(mes_ano < "2022-01-01")
           
 ```
 
@@ -60,7 +81,7 @@ Visualizando o número de nascidos por macrorregião.
 
 ```{r}
 
-a <- nascidos_go21 %>% 
+a <- nascidos_go %>% 
   ggplot(aes(x = mes_ano, y = quantidade, col = macrorregiao_pad)) + geom_line() + 
   theme_minimal()
 
@@ -85,7 +106,7 @@ regiao_centro_oeste <- nascidos_go %>%
 
 splits_regiao_centro_oeste <- time_series_split(
   regiao_centro_oeste,
-  assess = "16 months",
+  assess = "12 months",
   cumulative = TRUE
 )
 
@@ -182,14 +203,14 @@ Dividindo a base por treino e teste, usando os últimos 12 meses.
 
 ```{r}
 
-regiao_nordeste <- nascidos_go21 %>% 
+regiao_nordeste <- nascidos_go %>% 
   filter(macrorregiao_pad == "MACRORREGIAO NORDESTE") %>% 
   ungroup() %>% 
   select(-macrorregiao_pad)
 
 splits_regiao_nordeste <- time_series_split(
   regiao_nordeste,
-  assess = "16 months",
+  assess = "12 months",
   cumulative = TRUE
 )
 
@@ -199,9 +220,8 @@ splits_regiao_nordeste %>%
 
 splits_regiao_nordeste
 
-
-
 ```
+
 Treinando modelos 
 
 ```{r}
@@ -291,14 +311,14 @@ Dividindo a base por treino e teste, usando os últimos 12 meses.
 ```{r}
 
 
-regiao_centro_sudeste <- nascidos_go21 %>% 
+regiao_centro_sudeste <- nascidos_go %>% 
   filter(macrorregiao_pad == "MACRORREGIAO CENTRO SUDESTE") %>% 
   ungroup() %>% 
   select(-macrorregiao_pad)
 
 splits_regiao_centro_sudeste <- time_series_split(
   regiao_centro_sudeste,
-  assess = "16 months",
+  assess = "12 months",
   cumulative = TRUE
 )
 
@@ -401,14 +421,14 @@ Dividindo a base por treino e teste, usando os últimos 12 meses.
 
 ```{r}
 
-regiao_centro_norte <- nascidos_go21 %>% 
+regiao_centro_norte <- nascidos_go %>% 
   filter(macrorregiao_pad == "MACRORREGIAO CENTRO-NORTE") %>% 
   ungroup() %>% 
   select(-macrorregiao_pad)
 
 splits_regiao_centro_norte <- time_series_split(
   regiao_centro_norte,
-  assess = "16 months",
+  assess = "12 months",
   cumulative = TRUE
 )
 
@@ -521,14 +541,14 @@ Dividindo a base por treino e teste, usando os últimos 12 meses.
 
 ```{r}
 
-regiao_sudoeste <- nascidos_go21 %>% 
+regiao_sudoeste <- nascidos_go %>% 
   filter(macrorregiao_pad == "MACRORREGIAO SUDOESTE") %>% 
   ungroup() %>% 
   select(-macrorregiao_pad)
 
 splits_regiao_sudoeste <- time_series_split(
   regiao_sudoeste,
-  assess = "16 months",
+  assess = "12 months",
   cumulative = TRUE
 )
 
