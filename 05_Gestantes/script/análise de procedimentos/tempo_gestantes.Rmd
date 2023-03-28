@@ -32,7 +32,7 @@ Existem procedimentos que devem ser realizado para **todas as gestantes** e exis
 
 # Calculando frequência por tipo
 
-Primeiro vamos pegar os procedimentos, independente de quem realiza para vermos o volume necessário, independente das categorias que podem executálo. Observa-se que existem 38 procedimentos, sendo que 13 são exclusivos para a gestante de alto risco e 35 são exclusivos para a gestante de risco habitual. 
+Primeiro vamos pegar os procedimentos, independente de quem realiza para vermos o volume necessário, independente das categorias que podem executá-lo. Observa-se que existem 38 procedimentos, sendo que 13 são exclusivos para a gestante de alto risco e 35 são exclusivos para a gestante de risco habitual. 
 
 ```{r}
 

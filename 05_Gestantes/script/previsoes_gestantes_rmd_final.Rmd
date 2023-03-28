@@ -34,7 +34,9 @@ library(tidymodels)
 
 ```
 
-# Trazendo dados da MLP
+# Status de saúde - Previsões
+
+## Trazendo dados da MLP
 
 Trazendo os dados de MLP treinados pelo Diogo
 
@@ -42,22 +44,27 @@ Trazendo os dados de MLP treinados pelo Diogo
 
 resultados_mlp_prophet <- read_csv("resultados_mlp_prophet.csv")
 
-resultados_mlp <- 
+resultados_mlp_graph <- 
   resultados_mlp_prophet %>% 
     filter(model == 'mlp') %>% 
+    mutate(model = 'MLP') %>% 
     select(-`...1`) %>% 
     mutate(mes_ano = my(mes_ano)) %>% 
     mutate(macrorregiao_pad = case_when(codibge == 5206 ~ 'MACRORREGIAO SUDOESTE',
                                         codibge == 5207 ~ 'MACRORREGIAO NORDESTE',
                                         codibge == 5208 ~ 'MACRORREGIAO CENTRO-OESTE',
                                         codibge == 5209 ~ 'MACRORREGIAO CENTRO-NORTE',
-                                        codibge == 5210 ~ 'MACRORREGIAO CENTRO SUDESTE'))
+                                        codibge == 5210 ~ 'MACRORREGIAO CENTRO SUDESTE')) %>% 
+  select(macrorregiao_pad, mes_ano, model, total_nasc) %>% 
+  filter(mes_ano < '2022-01-01')  
+
+  
 
 ```
 
 
 
-# Baixando dados 
+## Baixando dados para demais modelos 
 
 Primeiro, vamos baixar os dados de nascidos e outras bases que possam contribuir para as análises. 
 
@@ -91,7 +98,7 @@ plotly::ggplotly(a)
 
 ```
 
-# Aplicando modeltime na macrorregião Centro-Oeste
+## Aplicando modeltime na macrorregião Centro-Oeste
 
 Primeiramente, vamos aplicar o modeltime apenas para a macrorregião Centro-Oeste. 
 
@@ -156,11 +163,28 @@ De acordo com os resultados dos três algoritmos testados, o ETS possui melhor r
 
 ```{r}
 
-ets_treino_regiao_centro_oeste <- calib_tbl_regiao_centro_oeste[[5]][[3]]
+ets_treino_regiao_centro_oeste <- calib_tbl_regiao_centro_oeste[[5]][[3]] %>% 
+                                        select(-.residuals) %>%
+                                        mutate(macrorregiao_pad = 'MACRORREGIAO CENTRO-OESTE',
+                                               .before = mes_ano) %>% 
+                                        gather(key = 'model',
+                                               value = 'total_nasc',
+                                               3:4) %>% 
+                                        mutate(model = if_else(model == '.prediction',
+                                                                'ETS',
+                                                                'REAL'))
 
-ets_treino_regiao_centro_oeste %>% 
-  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+graph <- resultados_mlp_graph %>% 
+  filter(macrorregiao_pad == 'MACRORREGIAO CENTRO-OESTE')
+
+
+ets_mlp_centro_oeste <- rbind(ets_treino_regiao_centro_oeste,graph)
+
+
+ets_mlp_centro_oeste %>% 
+  ggplot(aes(x = mes_ano, y = total_nasc, col = model)) + geom_line(size = 0.8) + 
+  theme_minimal() + xlab("Mês e ano") + ylab("Nascimentos")
+
 ```
 
 
@@ -194,10 +218,7 @@ future_forecast_tbl_regiao_centro_oeste %>%
   theme_minimal()
 ```
 
-#--------------------------#-----------------------------------#
-
-
-# Aplicando modeltime na macrorregião Nordeste
+## Aplicando modeltime na macrorregião Nordeste
 
 Dividindo a base por treino e teste, usando os últimos 12 meses.
 
@@ -261,11 +282,19 @@ De acordo com os resultados dos três algoritmos testados, o ARIMA possui melhor
 
 ```{r}
 
-arima_treino_regiao_nordeste <- calib_tbl_regiao_nordeste[[5]][[1]]
+arima_treino_regiao_nordeste <- calib_tbl_regiao_nordeste[[5]][[1]] %>% 
+                                        select(-.residuals) %>%
+                                        mutate(macrorregiao_pad = 'MACRORREGIAO NORDESTE',
+                                               .before = mes_ano) %>% 
+                                        gather(key = 'model',
+                                               value = 'total_nasc',
+                                               3:4) %>% 
+                                        mutate(model = if_else(model == '.prediction',
+                                                                'ARIMA',
+                                                                'REAL'))
 
 arima_treino_regiao_nordeste %>% 
-  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+  ggplot(aes(x = mes_ano, y = total_nasc, col = model)) + geom_line() + theme_minimal()
 
 
 
@@ -304,7 +333,7 @@ future_forecast_tbl_regiao_nordeste %>%
 
 ```
 
-# Aplicando modeltime na macrorregião Centro Sudeste
+## Aplicando modeltime na macrorregião Centro Sudeste
 
 Dividindo a base por treino e teste, usando os últimos 12 meses.
 
@@ -371,11 +400,19 @@ De acordo com os resultados dos três algoritmos testados, o ETS possui melhor r
 
 ```{r}
 
-ets_treino_regiao_centro_sudeste <- calib_tbl_regiao_centro_sudeste[[5]][[3]]
-
+ets_treino_regiao_centro_sudeste <- calib_tbl_regiao_centro_sudeste[[5]][[3]] %>% 
+                                        select(-.residuals) %>%
+                                        mutate(macrorregiao_pad = 'MACRORREGIAO CENTRO SUDESTE',
+                                               .before = mes_ano) %>% 
+                                        gather(key = 'model',
+                                               value = 'total_nasc',
+                                               3:4) %>% 
+                                        mutate(model = if_else(model == '.prediction',
+                                                                'ETS',
+                                                                'REAL'))
 ets_treino_regiao_centro_sudeste %>% 
-  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+  ggplot(aes(x = mes_ano, y = total_nasc, col = model)) + geom_line() + theme_minimal()
+
 
 ```
 
@@ -415,7 +452,7 @@ future_forecast_tbl_regiao_centro_sudeste %>%
 
 ```
 
-# Aplicando modeltime na macrorregião Centro norte
+## Aplicando modeltime na macrorregião Centro norte
 
 Dividindo a base por treino e teste, usando os últimos 12 meses.
 
@@ -438,11 +475,8 @@ splits_regiao_centro_norte %>%
 
 splits_regiao_centro_norte
 
-
-
-
-
 ```
+
 Treinando modelos 
 
 ```{r}
@@ -486,13 +520,19 @@ De acordo com os resultados dos três algoritmos testados, o ETS possui melhor r
 
 ```{r}
 
-ets_treino_regiao_centro_norte <- calib_tbl_regiao_centro_norte[[5]][[3]]
+ets_treino_regiao_centro_norte <- calib_tbl_regiao_centro_norte[[5]][[3]] %>% 
+                                          select(-.residuals) %>%
+                                        mutate(macrorregiao_pad = 'MACRORREGIAO CENTRO-NORTE',
+                                               .before = mes_ano) %>% 
+                                        gather(key = 'model',
+                                               value = 'total_nasc',
+                                               3:4) %>% 
+                                        mutate(model = if_else(model == '.prediction',
+                                                                'ETS',
+                                                                'REAL'))
 
 ets_treino_regiao_centro_norte %>% 
-  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
-
-
+  ggplot(aes(x = mes_ano, y = total_nasc, col = model)) + geom_line() + theme_minimal()
 
 ```
 
@@ -534,7 +574,7 @@ future_forecast_tbl_regiao_centro_norte %>%
 ```
 
 
-# Aplicando modeltime na macrorregião Sudoeste
+## Aplicando modeltime na macrorregião Sudoeste
 
 Dividindo a base por treino e teste, usando os últimos 12 meses.
 
@@ -605,18 +645,19 @@ De acordo com os resultados dos três algoritmos testados, o ETS possui melhor r
 ```{r}
 
 
-ets_treino_regiao_sudoeste <- calib_tbl_regiao_sudoeste[[5]][[3]]
+ets_treino_regiao_sudoeste <- calib_tbl_regiao_sudoeste[[5]][[3]] %>% 
+                                          select(-.residuals) %>%
+                                        mutate(macrorregiao_pad = 'MACRORREGIAO SUDOESTE',
+                                               .before = mes_ano) %>% 
+                                        gather(key = 'model',
+                                               value = 'total_nasc',
+                                               3:4) %>% 
+                                        mutate(model = if_else(model == '.prediction',
+                                                                'ETS',
+                                                                'REAL'))
 
 ets_treino_regiao_sudoeste %>% 
-  ggplot(aes(x = mes_ano)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
-
-
-
-
-``` 
-```{r}
-
+  ggplot(aes(x = mes_ano, y = total_nasc, col = model)) + geom_line() + theme_minimal()
 
 calib_tbl_regiao_sudoeste %>% 
   modeltime_forecast(
@@ -624,7 +665,6 @@ calib_tbl_regiao_sudoeste %>%
     actual_data = regiao_sudoeste
   ) %>% 
   plot_modeltime_forecast(.conf_interval_show = FALSE)
-
 
 ``` 
 
@@ -650,4 +690,199 @@ future_forecast_tbl_regiao_sudoeste %>%
 
 
 ``` 
+
+
+## Criando um gráfico com os melhores modelos na base de teste
+
+
+```{r}
+
+teste <- rbind(ets_treino_regiao_sudoeste,
+               ets_treino_regiao_centro_norte,
+               ets_treino_regiao_centro_oeste,
+               ets_treino_regiao_centro_sudeste,
+               arima_treino_regiao_nordeste,
+               resultados_mlp_graph)
+
+teste %>% 
+  ggplot(aes(x = mes_ano, y = total_nasc, col = model)) + geom_line(size = 0.8) + 
+  facet_wrap(~macrorregiao_pad, nrow = 5, scales = 'free') + theme_minimal() +
+  xlab("Mês e ano") + ylab("Nascimentos")
+
+```
+
+## Previsões 
+
+Vamos pegar os dados de previsão da MLP para todas as macrorregiões, com exceção da macrorregião Nordeste, on o Arima performou melhor  
+
+```{r}
+
+resultados_mlp_previsoes <- 
+  resultados_mlp_prophet %>% 
+    filter(model == 'mlp') %>% 
+    mutate(model = 'MLP') %>% 
+    select(-`...1`) %>% 
+    mutate(mes_ano = my(mes_ano)) %>% 
+    mutate(macrorregiao_pad = case_when(codibge == 5206 ~ 'MACRORREGIAO SUDOESTE',
+                                        codibge == 5207 ~ 'MACRORREGIAO NORDESTE',
+                                        codibge == 5208 ~ 'MACRORREGIAO CENTRO-OESTE',
+                                        codibge == 5209 ~ 'MACRORREGIAO CENTRO-NORTE',
+                                        codibge == 5210 ~ 'MACRORREGIAO CENTRO SUDESTE')) %>% 
+  select(macrorregiao_pad, mes_ano, model, total_nasc) %>% 
+  filter(mes_ano > '2021-12-01') %>% 
+  filter(macrorregiao_pad != 'MACRORREGIAO NORDESTE')
+
+resultado_arima_previsoes <- 
+  future_forecast_tbl_regiao_nordeste %>% 
+  filter(.model_id == 1 & .key == 'prediction') %>% 
+  mutate(macrorregiao_pad = 'MACRORREGIAO NORDESTE',
+         model = 'ARIMA') %>% 
+  rename(mes_ano = .index,
+         total_nasc = .value) %>% 
+  select(macrorregiao_pad,
+         mes_ano, model,
+         total_nasc)
+  
+
+previsoes <- rbind(resultados_mlp_previsoes,
+                   resultado_arima_previsoes)
+
+```
+
+
+
+# Calculando a demanda futura com base no status de saúde 
+
+```{r eval=FALSE, include=FALSE}
+
+#SELECT SG_UF, 
+#            SUM(BENEF_ASSISTENCIA_MEDICA) AS BENEF_MEDICO,
+#            SUM(POPULACAO) AS POP       
+#FROM Dados.ans_cobertura."taxa_cobertura.parquet"
+#WHERE PERIODO = 2022 AND CD_UF = 52
+#GROUP BY SG_UF
+
+```
+
+Vamos fazer as estimativas apenas para a população SUS dependente. Para isso, vamos utilizar o valor de 80% por ser o valor da população SUS dependente no estado de Goiás como um todo em 2022 de acordo com dados da ANS. 
+
+Além disso, já vamos calcular o total de gestantes de alto risco e risco habitual considerando alguns parâmetros nacionais estabelecidos no caderno de critérios e parâmetros. 
+
+```{r}
+
+previsoes <- previsoes %>% 
+  mutate(nasc_SUS = total_nasc * 0.80,
+         nasc_sus_hab = nasc_SUS * 0.85,
+         nasc_sus_risc = nasc_SUS * 0.15)
+
+```
+
+Existem procedimentos que são realizados para todas as gestantes, assim como os procedimentos que são realizados apenas para as de alto risco. Além disso, existem percentuais para parto cesáreo e parto normal. Aproximadamente, de acordo com o SINASC, 58% dos partos de Goiás são cesáreos. 
+
+```{r}
+# frequencia de procedimento 
+
+f_procedimentos <- previsoes %>% 
+  mutate(prenatal = nasc_SUS * 6,
+         acoes_educa = nasc_SUS * 0.4,
+         consulta_espec = nasc_sus_risc * 5,
+         puerperio = nasc_SUS * 4,
+         parto_ces = nasc_SUS * 0.58, # parametro ajustavel
+         parto_nor = nasc_SUS * 0.42, # parametro ajustavel
+         ultrasson_risc = nasc_sus_risc * 2,
+         ultrasson_hab = nasc_sus_hab * 1)
+
+
+```
+
+Agora vamos calcular a demanda considerando os tempos de procedimentos
+
+```{r}
+# tempo de procedimentos
+
+# parametros ajustaveis
+
+t_procedimentos <- 
+  f_procedimentos %>% 
+  mutate(t_prenatal = prenatal * 0.5,
+         t_educativas = acoes_educa * 1,
+         t_consulta_espec = consulta_espec * 0.5,
+         t_puerperio = puerperio * 0.5,
+         t_parto_ces = parto_ces * 4.4,
+         t_parto_nor = parto_nor * 2.53,
+         t_ultrasson_risc = ultrasson_risc * 0.5,
+         t_ultrasson_hab = ultrasson_hab * 0.5)
+
+```
+
+Esses tempos se referem ao trabalho mensal. Alguns dos procedimentos listados são realizados por médicos e enfermeiros. Para o presente estudo, vamos assumir que o trabalho os procedimentos da APS são realizados 50% por médios e 50% por enfermeiros. Já os procedimentos da atenção especializada são realizados por médicos. Fazemos isso especialmente por dificuldade de comparar com a oferta do CNES-PF. 
+
+```{r}
+
+
+
+
+```
+
+
+
+
+
+Vamos selecionar apenas os procedimentos de competência dos médicos e enfermeiros, pois estes  realizados por médicos e enfermeiros.
+
+Não vamos acessar procedimentos de natureza laboratorial, pois existem outras categorias profissionais envolvidas. 
+
+```{r}
+
+procedimentos <- read_excel("análise de procedimentos/tempos_procedimentos.xlsx") %>% 
+                        filter(codigo_familia_cbo == '2235' |
+                               codigo_familia_cbo == '2231') %>% 
+                        filter(tipo_procedimento != 'Exame laboratorial')
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Calculando o percentual de participação de atividades na AE (ambulatorial)
+
+Tal cálculo será utilizado na oferta 
+
+```{r}
+
+sia_medicos <- sqlQuery(channel, 'SELECT * FROM "Analytics Layer".Infraestrutura."Atuação médicos obstetras - SIA"')
+
+sia_gineco <- sia_medicos %>% 
+                  filter(CATEGORIA != "NA") 
+
+sia_gestantes <- sia_gineco %>% 
+                    filter(str_detect(CATEGORIA, 'gravidez')|
+                           str_detect(CATEGORIA, 'parto')|
+                           str_detect(CATEGORIA, 'gestação')|
+                           str_detect(CATEGORIA, 'contraç$')|
+                           str_detect(CATEGORIA, 'Hipertensão materna')|
+                           str_detect(CATEGORIA, 'mãe')|
+                           str_detect(CATEGORIA, 'aborto')|
+                           str_detect(CATEGORIA, 'feto')|
+                           str_detect(CATEGORIA, 'Placenta prévia')|
+                           str_detect(CATEGORIA, 'recém-nascido')|
+                           str_detect(CATEGORIA, 'Eclâmpsia')|
+                           str_detect(CATEGORIA, 'pós-natal')|
+                           str_detect(CATEGORIA, 'nascido'))
+
+sum(sia_gestantes$QTD_PROCEDIMENTOS)/sum(sia_gineco$QTD_PROCEDIMENTOS)
+
+```
+
+
 
