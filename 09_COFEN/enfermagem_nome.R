@@ -1,5 +1,4 @@
 library(genderBR)
-library(dplyr)
 library(RODBC)
 library(tidyverse)
 
