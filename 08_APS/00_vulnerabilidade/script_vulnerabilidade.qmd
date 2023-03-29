@@ -1,0 +1,128 @@
+---
+title: "Juntando SISAB e dados da SAPS"
+format: html
+editor: visual
+---
+
+## Tratamento dados APS
+
+O objetivo do presente script é realizar um tratamento para juntar as tabelas contendo população vulnerável (disponibilizado pela SAPS) e população vinculada à APS em cada município (extraído no SISAB).
+
+```{r}
+#| warning: false
+
+library(tidyverse)
+library(readxl)
+
+cadastro_pop_sisab <- read_excel("~/GitHub/dimensionamento/08_APS/bases/cadastro-individual_aps.xls")
+
+cadastro_pop_sisab$CNES <- as.integer(cadastro_pop_sisab$CNES)
+
+pop_vulneravel_previne_202212 <- read_excel("~/GitHub/dimensionamento/08_APS/bases/pop_vulneravel_previne_202212.xlsx")
+
+pop_vulneravel_previne_202212$CO_CNES <- as.integer(pop_vulneravel_previne_202212$CO_CNES)
+
+```
+
+Juntando as duas bases
+
+```{r}
+
+sisab <- cadastro_pop_sisab %>% 
+            left_join(pop_vulneravel_previne_202212, by = c("CNES"="CO_CNES")) %>% 
+            janitor::clean_names() %>% 
+            select(uf, ibge, municipio, cnes, estabelecimento, 
+                   pop_vinc, qt_bnf_auxilio_brasil, qt_beneficiarios) %>% 
+            mutate(pop_vinc = as.numeric(pop_vinc)) %>% 
+            mutate(perc_benef_pbf = qt_bnf_auxilio_brasil/pop_vinc,
+                   perc_benef_previne = qt_beneficiarios/pop_vinc)
+
+```
+
+Agora vamos calcular o grau de vulnerabilidade de cada unidade por município. Vamos fazer um exemplo para Águas Lindas de Goiás.
+
+```{r}
+
+aguas_lindas <- 
+  sisab %>% 
+  filter(ibge == '520025') %>% 
+  mutate(classificacao_pbf = case_when(perc_benef_pbf <= quantile(perc_benef_pbf, 0.33) ~ 'baixa vulnerabilidade',
+                                   perc_benef_pbf > quantile(perc_benef_pbf, 0.33) & 
+                                   perc_benef_pbf <= quantile(perc_benef_pbf, 0.66) ~ 'média vulnerabilidade',
+                                   perc_benef_pbf > quantile(perc_benef_pbf, 0.66) ~ 'alta vulnerabilidade')) %>% 
+  mutate(classificacao_previne = case_when(perc_benef_previne <= quantile(perc_benef_previne, 0.33) ~ 'baixa vulnerabilidade',
+                                   perc_benef_previne > quantile(perc_benef_previne, 0.33) & 
+                                   perc_benef_previne <= quantile(perc_benef_previne, 0.66) ~ 'média vulnerabilidade',
+                                   perc_benef_previne > quantile(perc_benef_previne, 0.66) ~ 'alta vulnerabilidade'))
+
+
+```
+
+Vamos aplicar a lógica para todos os municípios.
+
+```{r}
+teste <- 
+sisab %>% 
+  filter(perc_benef_pbf != "NA") %>% 
+  mutate(classificacao_pbf = case_when(perc_benef_pbf <= quantile(perc_benef_pbf, 0.33) ~ 'baixa vulnerabilidade',
+                                   perc_benef_pbf > quantile(perc_benef_pbf, 0.33) & 
+                                   perc_benef_pbf <= quantile(perc_benef_pbf, 0.66) ~ 'média vulnerabilidade',
+                                   perc_benef_pbf > quantile(perc_benef_pbf, 0.66) ~ 'alta vulnerabilidade'), .by = c(uf, ibge, municipio)) %>% 
+  mutate(classificacao_previne = case_when(perc_benef_previne <= quantile(perc_benef_previne, 0.33) ~ 'baixa vulnerabilidade',
+                                   perc_benef_previne > quantile(perc_benef_previne, 0.33) & 
+                                   perc_benef_previne <= quantile(perc_benef_previne, 0.66) ~ 'média vulnerabilidade',
+                                   perc_benef_previne > quantile(perc_benef_previne, 0.66) ~ 'alta vulnerabilidade'), .by = c(uf, ibge, municipio))
+
+
+```
+
+Agora vamos determinar a quantidade de equipes de acordo com o grau de vulnerabilidade
+
+```{r}
+
+equipes <- 
+  teste %>% 
+    mutate(equipes_pbf = case_when(classificacao_pbf == 'baixa vulnerabilidade' ~ pop_vinc/3500, 
+                               classificacao_pbf == 'média vulnerabilidade' ~ pop_vinc/2500,
+                               classificacao_pbf == 'alta vulnerabilidade' ~ pop_vinc/2000)) %>% 
+    mutate(medicos_pbf = equipes_pbf,
+           enfermeiros_pbf = equipes_pbf,
+           tecnicos_pbf = 2 * equipes_pbf,
+           acs_pbf = pop_vinc/750) %>% 
+  mutate(equipes_previne = case_when(classificacao_previne == 'baixa vulnerabilidade' ~ pop_vinc/3500, 
+                               classificacao_previne == 'média vulnerabilidade' ~ pop_vinc/2500,
+                               classificacao_previne == 'alta vulnerabilidade' ~ pop_vinc/2000)) %>% 
+    mutate(medicos_previne = equipes_previne,
+           enfermeiros_previne = equipes_previne,
+           tecnicos_previne = 2 * equipes_previne,
+           acs_previne = pop_vinc/750)
+
+# writexl::write_xlsx(equipes, 'equipes.xlsx')
+
+```
+
+Vamos determinar o número de profissionais por município considerando o número de equipes.
+
+```{r}
+
+prof_municipio <- 
+        equipes %>% 
+        group_by(uf, ibge, municipio) %>% 
+        summarise(total_equipe = sum(equipes_pbf),
+                  total_pop = sum(pop_vinc)) %>% 
+        mutate(medicos = total_equipe,
+               enfermeiros = total_equipe,
+               tecnicos = total_equipe * 2,
+               acs = total_pop/750)
+
+#writexl::write_xlsx(prof_municipio, 'municipios.xlsx')
+
+```
+
+```{r}
+
+teste_go <- teste %>% 
+              group_by(uf, municipio) %>% 
+              count()
+
+```
