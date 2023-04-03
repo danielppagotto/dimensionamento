@@ -299,6 +299,5 @@ demanda_dim_10 <- df_pop_regiao %>%
 
 parametros_demanda <- rbind(demanda, demanda_aum_5, demanda_aum_10, demanda_dim_5, demanda_dim_10)
 
-writexl::write_xlsx(parametros_demanda,"09_basesPBI/parametros_demanda.xlsx")
+write.csv(parametros_demanda,"09_basesPBI/parametros_demanda.csv")
 
-export(parametros_demanda,"09_basesPBI/parametros_demanda.xlsx")
