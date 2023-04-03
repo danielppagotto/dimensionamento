@@ -25,8 +25,11 @@ sexo_uf <- df_enfermagem_s %>%
   group_by(uf_sigla, categoria, sexo) %>% 
   count() %>% 
   group_by(uf_sigla, categoria) %>% 
-  mutate(freq = n/sum(n))
+  mutate(freq = n/sum(n)) %>% 
+  mutate(sexo = if_else(sexo == 'Male','Masculino','Feminino'))
 
+
+writexl::write_xlsx(sexo_uf, '01_PBI/sexo.xlsx')
 
 sexo_uf %>% 
   ggplot(aes(x = uf_sigla, y = freq, fill = sexo)) + geom_col() + 

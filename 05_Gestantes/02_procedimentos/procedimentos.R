@@ -10,8 +10,9 @@ library(readxl)
 
 previsoes_go <- read_excel("01_previsoes_nascidos/previsoes_go.xlsx")
 
-# Tempos ------------------------------------------------------------------
+# Criando funcao para procedimentos
 
+# Tempos ------------------------------------------------------------------
 
 nascimentos_previsao_tempos <- read_excel("~/GitHub/prophet_gestantes/bases/nascimentos_previsao_tempos.xlsx")
 
