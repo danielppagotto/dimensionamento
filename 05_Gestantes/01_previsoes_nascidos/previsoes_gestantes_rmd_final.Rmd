@@ -317,7 +317,7 @@ A ARIMA apresentar melhores resultados em termos de métricas.
 
 future_forecast_tbl_regiao_nordeste <- calib_tbl_regiao_nordeste %>% 
   modeltime_refit(regiao_nordeste) %>% 
-  modeltime_forecast(h = "24 months",
+  modeltime_forecast(h = "36 months",
                      actual_data = regiao_nordeste)
 
 future_forecast_tbl_regiao_nordeste %>% 
@@ -719,6 +719,27 @@ Vamos pegar os dados de previsão da MLP para todas as macrorregiões, com exce�
 
 ```{r}
 
+# juntando os dados que Arthur passou no dia 06/04
+
+resultados_mlp_24 <- read_csv("macro_results_mlp_2024.csv")
+
+resultados_mlp_24 <- resultados_mlp_24 %>% 
+  select(-`...1`,-mae_mlp_2021,-mape_mlp_2021) %>% 
+  gather(key = "mes_ano", "value" = total_nasc,
+         2:13) %>% 
+  mutate(mes_ano = my(mes_ano)) %>% 
+  mutate(model = "MLP") %>% 
+  mutate(macrorregiao_pad = case_when(codibge == 5206 ~ 'MACRORREGIAO SUDOESTE',
+                                        codibge == 5207 ~ 'MACRORREGIAO NORDESTE',
+                                        codibge == 5208 ~ 'MACRORREGIAO CENTRO-OESTE',
+                                        codibge == 5209 ~ 'MACRORREGIAO CENTRO-NORTE',
+                                        codibge == 5210 ~ 'MACRORREGIAO CENTRO SUDESTE')) %>% 
+  select(codibge, macrorregiao_pad, mes_ano, model, total_nasc) %>% 
+  filter(mes_ano > '2021-12-01') %>% 
+  filter(macrorregiao_pad != 'MACRORREGIAO NORDESTE')
+
+
+
 resultados_mlp_previsoes <- 
   resultados_mlp_prophet %>% 
     filter(model == 'mlp') %>% 
@@ -730,7 +751,7 @@ resultados_mlp_previsoes <-
                                         codibge == 5208 ~ 'MACRORREGIAO CENTRO-OESTE',
                                         codibge == 5209 ~ 'MACRORREGIAO CENTRO-NORTE',
                                         codibge == 5210 ~ 'MACRORREGIAO CENTRO SUDESTE')) %>% 
-  select(macrorregiao_pad, mes_ano, model, total_nasc) %>% 
+  select(codibge, macrorregiao_pad, mes_ano, model, total_nasc) %>% 
   filter(mes_ano > '2021-12-01') %>% 
   filter(macrorregiao_pad != 'MACRORREGIAO NORDESTE')
 
@@ -738,16 +759,29 @@ resultado_arima_previsoes <-
   future_forecast_tbl_regiao_nordeste %>% 
   filter(.model_id == 1 & .key == 'prediction') %>% 
   mutate(macrorregiao_pad = 'MACRORREGIAO NORDESTE',
-         model = 'ARIMA') %>% 
+         model = 'ARIMA', codibge = '5207') %>% 
   rename(mes_ano = .index,
          total_nasc = .value) %>% 
-  select(macrorregiao_pad,
+  select(codibge, macrorregiao_pad,
          mes_ano, model,
          total_nasc)
   
 
 previsoes <- rbind(resultados_mlp_previsoes,
-                   resultado_arima_previsoes)
+                   resultado_arima_previsoes,
+                   resultados_mlp_24)
+
+nascidos_atual <- nascidos_go %>% 
+  mutate(model = 'atual') %>% 
+  select(cod_macrorregiao, macrorregiao_pad,
+         mes_ano, model, quantidade) %>% 
+  rename(codibge = cod_macrorregiao,
+         total_nasc = quantidade)
+
+resultados_pbi <- rbind(previsoes,
+                        nascidos_atual)
+
+# writexl::write_xlsx(resultados_pbi, 'previsoes_2024_PBI.xlsx')
 
 ```
 
