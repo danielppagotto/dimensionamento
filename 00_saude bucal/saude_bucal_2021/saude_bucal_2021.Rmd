@@ -197,4 +197,12 @@ DT::datatable(fte)
 ```
 Os procedimentos coletivos podem ser feitos pelo técnico de saúde bucal, com exceção do exame bucal com finalidade epidemiológica. 
 
-Auxiliar de Consultório Dentário
+```{r}
+
+df_populacao <- df_pop %>% 
+  spread(key = FAIXA_ETARIA, value = POPULACAO)
+
+writexl::write_xlsx(df_populacao, "df_populacao.xlsx")
+
+```
+

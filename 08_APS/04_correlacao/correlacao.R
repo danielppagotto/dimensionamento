@@ -32,7 +32,7 @@ c <- vulnerabilidade_ra %>%
 
 a / b / c
 
-writexl::write_xlsx(vulnerabilidade_ra_pbf, "vulnerabilidade_pbf.xlsx")
+#writexl::write_xlsx(vulnerabilidade_ra_pbf, "vulnerabilidade_pbf.xlsx")
 
 vulnerabilidade_ra_previne <- estudo_de_caso_bsb %>% 
   filter(uf == 'DF') %>% 
@@ -41,7 +41,7 @@ vulnerabilidade_ra_previne <- estudo_de_caso_bsb %>%
   group_by(RA) %>% 
   mutate(freq = n/sum(n))
 
-writexl::write_xlsx(vulnerabilidade_ra_previne, "vulnerabilidade_previne.xlsx")
+#writexl::write_xlsx(vulnerabilidade_ra_previne, "vulnerabilidade_previne.xlsx")
 
 # Correlacao 
 
@@ -67,7 +67,8 @@ base <- estudo_de_caso_bsb %>%
 base %>% 
   ggplot(aes(x = perc_benef_pbf, y = resultado, col = classificacao_pbf)) + 
   geom_smooth(method = 'lm', se = FALSE)+
-  geom_point() + theme_minimal()
+  geom_point() + theme_minimal() + xlab("Percentual de Beneficiários - PBF") + 
+  ylab("Resultado de Oferta - Demanda")
   
 
 base_pbi_cor <- 
@@ -80,13 +81,16 @@ base_pbi_cor <-
   mutate(indicador = if_else(indicador == 'perc_benef_pbf','PBF','Previne'))
 
 
-writexl::write_xlsx(base, 'correlacao_pbf_previne.xlsx')
+# writexl::write_xlsx(base, 'correlacao_pbf_previne.xlsx')
 
 cor(base$perc_benef_pbf, base$resultado)
 
 
 # Previne
 
+modelo <- lm(data = base, resultado ~ perc_benef_pbf)
+
+summary(modelo)
 
 base %>% 
   ggplot(aes(x = perc_benef_previne, y = resultado, col = classificacao_previne)) + 

@@ -713,6 +713,24 @@ plotly::ggplotly(b)
 
 ```
 
+```{r}
+X <- teste %>% 
+  filter(macrorregiao_pad == "MACRORREGIAO NORDESTE") %>% 
+  ggplot(aes(x = mes_ano, y = total_nasc, col = model)) + geom_line(size = 0.8) + 
+  facet_wrap(~macrorregiao_pad, nrow = 5, scales = 'free') + theme_minimal() +
+  xlab("Mês e ano") + ylab("Nascimentos")
+
+
+Y <- teste %>% 
+  filter(macrorregiao_pad == "MACRORREGIAO CENTRO-NORTE") %>% 
+  ggplot(aes(x = mes_ano, y = total_nasc, col = model)) + geom_line(size = 0.8) + 
+  facet_wrap(~macrorregiao_pad, nrow = 5, scales = 'free') + theme_minimal() +
+  xlab("Mês e ano") + ylab("Nascimentos")
+
+X / Y
+```
+
+
 ## Previsões 
 
 Vamos pegar os dados de previsão da MLP para todas as macrorregiões, com exceção da macrorregião Nordeste, on o Arima performou melhor  
@@ -770,6 +788,9 @@ resultado_arima_previsoes <-
 previsoes <- rbind(resultados_mlp_previsoes,
                    resultado_arima_previsoes,
                    resultados_mlp_24)
+
+previsoes <- previsoes %>% 
+                mutate(model = 'previsões')
 
 nascidos_atual <- nascidos_go %>% 
   mutate(model = 'atual') %>% 
