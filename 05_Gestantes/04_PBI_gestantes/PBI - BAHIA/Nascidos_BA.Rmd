@@ -1,0 +1,99 @@
+
+# Nascidos Bahia
+
+Preparando o ambiente
+
+```{r setup, include=FALSE}
+
+options(scipen = 999)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+
+
+if (!require(RODBC)) { install.packages(RODBC); require(RODBC) }
+
+dremio_host <- "200.137.215.27"
+dremio_port <- "31010"
+dremio_uid <- "daniel"
+dremio_pwd <- Sys.getenv("datalake")
+
+channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
+
+library(tidyverse)
+library(lubridate)
+
+```
+
+## Acessando dados da Bahia - Datalake
+
+Vamos acessar os dados de nascidos vivos por região de saúde na Bahia e realizar alguns tratamentos
+
+```{r}
+
+consulta <- 'SELECT * FROM "Analytics Layer"."Epidemiológico".Nascimentos."Nascidos Vivos por Região de Saúde"
+WHERE CAST(ano AS INTEGER) > 2015 AND CAST(ano AS INTEGER) < 2022'
+
+nascidos_BA <- sqlQuery(channel, consulta, 
+                     as.is = TRUE)
+
+nascidos_BA <- nascidos_BA %>% 
+                    filter(uf_sigla == 'BA')
+
+
+nascidos_BA$quantidade <- as.numeric(nascidos_BA$quantidade)
+
+nascidos_BA <- nascidos_BA %>% 
+            mutate(mes_ano = paste(mes, ano, sep = ""),
+                   mes_ano = my(mes_ano)) %>% 
+            select(-mes,-ano) 
+
+regioes_BA <- 
+  nascidos_BA %>% 
+  select(uf_sigla, cod_regsaud, 
+         regiao_saude_pad) %>% 
+  distinct() %>% 
+  mutate(cod_regsaud = as.numeric(cod_regsaud))
+
+```
+
+## Acessando dados da Bahia - previsões
+
+```{r}
+
+previsoes_ba <- read_csv("results_2022-2027_BA.csv") %>% 
+                    select(-mae,-mape,-layers,-batch_size,
+                           -input_steps,-output_steps,
+                           -n_preds,-seed,-ep) 
+
+previsoes_gather <- previsoes_ba %>% 
+                gather(key = "data",
+                       value = "qtd", 2:61) %>% 
+                mutate(mes_ano = my(data)) %>% 
+                filter(mes_ano < "2025-01-01") %>% 
+                select(-data) %>% 
+                left_join(regioes_BA, by = c("codibge"="cod_regsaud")) %>% 
+                rename(cod_regsaud = codibge,
+                       quantidade = qtd) %>% 
+                select(uf_sigla, cod_regsaud,
+                       regiao_saude_pad, quantidade, mes_ano)
+
+```
+
+
+## Juntando os dados de previsão com os reais
+
+Juntando em uma só planilha e salvando em um arquivo xlsx para jogar ao PBI.  
+
+```{r}
+
+nascidos_BA_pbi <- rbind(nascidos_BA, previsoes_gather) %>% 
+                      mutate(quantidade = round(quantidade))
+
+writexl::write_xlsx(nascidos_BA_pbi, "nascidos_BA_PBI.xlsx")
+
+```
+
