@@ -1,0 +1,140 @@
+---
+title: "hrh"
+format: html
+editor: visual
+---
+
+```{r}
+#| warning: false
+#| echo: false
+
+library(tidyverse)
+library(readxl)
+library(geojsonio)
+library(rmapshaper)
+```
+
+## Lendo os dados de **demanda** e filtrando apenas observações necessárias
+
+```{r}
+#| warning: false
+
+cegonha_go <- read_csv("df_prof_go.csv") %>% 
+                  filter(nivel_atencao == 'APS') %>% 
+                  select(regiao, mês_procedimento_realizado, CBO,
+                         horas_categoria, fte40) %>% 
+                    mutate(prof = case_when(substr(CBO, 1, 4) == "2235" ~ "Enfermeiro",
+                                            substr(CBO, 1, 4) == "2251" ~ "Médico",
+                                            TRUE ~ "Outros")) %>% 
+                    filter(prof != "Outros") 
+
+demanda <- cegonha_go %>% 
+  group_by(regiao, mês_procedimento_realizado,
+           prof) %>% 
+  summarise(fte40_demanda = sum(fte40)) %>% 
+  mutate(regiao = as.character(regiao)) %>% 
+  filter(mês_procedimento_realizado > "2021-01-01")
+
+```
+
+## Lendo os dados de **oferta** 
+
+```{r}
+#| warning: false
+#| echo: false
+
+options(scipen = 999)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+
+
+if (!require(RODBC)) { install.packages(RODBC); require(RODBC) }
+
+dremio_host <- "200.137.215.27"
+dremio_port <- "31010"
+dremio_uid <- "daniel"
+dremio_pwd <- Sys.getenv("datalake")
+
+channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
+
+consulta <- 'SELECT * FROM "Analytics Layer".Infraestrutura.Profissionais."Profissionais APS"'
+
+oferta_GO <- sqlQuery(channel, consulta, 
+                     as.is = TRUE)
+
+
+producao_SISAB <- read_excel("producao_SISAB.xls") %>% 
+                      select(Cod_Regiao_Saude, Porcentagem)
+
+producao_SISAB$Cod_Regiao_Saude = as.character(producao_SISAB$Cod_Regiao_Saude)
+```
+
+## Tratando os dados de oferta 
+
+```{r}
+
+oferta <- oferta_GO %>% 
+  mutate(ano_mes = ym(COMPETEN)) %>% 
+  mutate(horas = HORAOUTR + HORAHOSP + HORA_AMB) %>% 
+  mutate(prof = if_else(substr(CBO, 1, 4) == "2235", "Enfermeiro", "Médico")) %>% 
+  group_by(uf, cod_regsaud, regiao_saude, prof, ano_mes) %>% 
+  summarise(horas = sum(horas)) %>% 
+  left_join(producao_SISAB, by = c("cod_regsaud"="Cod_Regiao_Saude")) %>% 
+  mutate(fte40 = horas/126) %>% 
+  mutate(direto = (fte40) * 0.75) %>% 
+  mutate(liquido = direto * Porcentagem) %>% 
+  mutate(ano_mes_corrigido = ano_mes + years(2)) %>% 
+  select(-ano_mes) 
+
+```
+
+# Comparando demanda e oferta 
+
+```{r}
+
+demanda_oferta <- 
+  demanda %>%  
+  left_join(oferta, by = c("regiao"="cod_regsaud",
+                           "prof"="prof",
+                           "mês_procedimento_realizado"="ano_mes_corrigido")) %>% 
+  filter(uf != "NA") %>% 
+  mutate(ano = year(mês_procedimento_realizado)) %>% 
+  mutate(resultado = liquido - fte40_demanda) %>% 
+  group_by(regiao, ano, prof,
+           uf, regiao_saude) %>% 
+  summarise(resultado = sum(resultado),
+            demanda = sum(fte40_demanda),
+            oferta = sum(liquido)) %>% 
+  filter(ano == '2024') %>% 
+  mutate(perc = (oferta * 100)/demanda)
+
+
+```
+
+# criando um mapa para 
+
+
+```{r}
+spdf <- geojson_read("shape file regioes saude.json",  what = "sp")
+```
+
+
+```{r}
+library(broom)
+
+spdf@data$mystate = substr( spdf@data$code, 1, 2)
+spdf_region_6 = spdf[ spdf@data$est_id == "52" , ]
+
+spdf_fortified <- tidy(spdf_region_6)
+
+# Plot it
+library(ggplot2)
+
+plot(spdf_fortified)
+
+```
+

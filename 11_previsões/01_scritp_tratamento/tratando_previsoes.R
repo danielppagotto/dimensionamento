@@ -15,3 +15,13 @@ previsoes_tratado <-
   gather(key = "mes_ano", value = "qtd",
          5:124) %>% 
   mutate(data = my(mes_ano))
+
+
+# pegando dados de Goiás para o artigo da HRH
+
+previsoes_go <- 
+  previsoes_tratado %>% 
+  filter(Estado == "GO")
+
+writexl::write_xlsx(previsoes_go, "previsoes_go.xlsx")
+

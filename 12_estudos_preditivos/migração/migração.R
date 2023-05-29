@@ -12,9 +12,9 @@ knitr::opts_chunk$set(
 
 if (!require(RODBC)) { install.packages(RODBC); require(RODBC) }
 
-dremio_host <- "200.137.215.27"
-dremio_port <- "31010"
-dremio_uid <- "daniel"
+dremio_host <- Sys.getenv("endereco")
+dremio_port <- Sys.getenv("port")
+dremio_uid <- Sys.getenv("uid")
 dremio_pwd <- Sys.getenv("datalake")
 
 channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
