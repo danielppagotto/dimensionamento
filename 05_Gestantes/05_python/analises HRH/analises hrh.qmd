@@ -1,5 +1,5 @@
 ---
-title: "hrh"
+title: "Needs-based health workforce planning for pregnancy care in Brazil"
 format: html
 editor: visual
 ---
@@ -11,8 +11,82 @@ editor: visual
 library(tidyverse)
 library(readxl)
 library(geojsonio)
-library(rmapshaper)
+library(broom)
+library(jsonlite)
+library(RODBC)
+
 ```
+
+# Calculating Demand
+
+## Target Population
+
+At first we will access SINASC projections data. These projections were calculated by two co-authors. Multilayer Perceptron (MLP) algorithm registered the best results among other machine learning and statistics technics.  
+
+We will deduce the population covered by health insurance.   
+
+```{r}
+#| warning: false 
+
+#reading and selecting variables
+predictions <- read_excel("~/GitHub/dimensionamento/05_Gestantes/05_python/previsoes_go.xlsx") |>   
+               select(codibge, data, qtd) |> 
+               mutate(qtd = round(qtd))
+
+health_insurance <- read_csv("~/GitHub/dimensionamento/05_Gestantes/05_python/beneficiarios_plano_saude.csv") |>  
+         filter(mes == "06") |>  
+         mutate(perc_sus = (100 - percentual_pop_coberta)/100) |>  
+         select(cod_regsaud, perc_sus) 
+
+predictions <- 
+  predictions |>  
+  left_join(health_insurance, by = c("codibge"="cod_regsaud")) |>  
+  mutate(qtd_sus = round(qtd * perc_sus)) |> 
+  mutate(data = as.character(data))
+
+DT::datatable(predictions)
+
+```
+
+## Total services 
+
+We will now quantify the number and variety of services need to assist pregnant women and the newborn in the primary health care (PHC) setting. 
+
+```{r include=FALSE}
+#| echo: false
+#| warning: false
+
+servicos <- vroom::vroom("servicos.csv") |> select(-`...1`)
+
+```
+
+```{r}
+#| eval: false
+for(i in 1:nrow(previsoes_go)){
+  row <- previsoes_go[i,]
+  url = paste("http://200.137.215.27:5025/calcula_procedimentos?mes_ano=", 
+              substring(row$data, 1, 7), 
+              "&nascidos_vivos=", 
+              round(row$qtd_sus, 0), sep = '')
+  temp <- fromJSON(url)
+  servicos <- rbind(temp, servicos) 
+  print(paste("Chamando:",url))
+}
+
+```
+
+## PHC Services and professionals
+
+Vamos selecionar apenas os serviços realizados na APS. Em sequência, vamos selecionar apenas aqueles que são executados por médicos ou enfermeiros. Para isso vamos utilizar como referência nossa tabela que relaciona procedimentos e profissionais. 
+
+```{r}
+
+servicos <- servicos |> 
+                filter(nivel_atencao == "APS")
+
+```
+
+
 
 ## Lendo os dados de **demanda** e filtrando apenas observações necessárias
 
@@ -37,26 +111,25 @@ demanda <- cegonha_go %>%
 
 ```
 
+```{r}
+#| echo: false
+#| warning: false
+
+oferta_GO <- vroom::vroom("oferta_go.csv") |> select(-`...1`)
+
+```
+
+
+
 ## Lendo os dados de **oferta** 
 
 ```{r}
 #| warning: false
-#| echo: false
+#| eval: false
 
-options(scipen = 999)
-
-knitr::opts_chunk$set(
-	echo = TRUE,
-	message = FALSE,
-	warning = FALSE
-)
-
-
-if (!require(RODBC)) { install.packages(RODBC); require(RODBC) }
-
-dremio_host <- "200.137.215.27"
-dremio_port <- "31010"
-dremio_uid <- "daniel"
+dremio_host <- Sys.getenv("endereco")
+dremio_port <- Sys.getenv("port")
+dremio_uid <- Sys.getenv("uid")
 dremio_pwd <- Sys.getenv("datalake")
 
 channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
@@ -66,6 +139,9 @@ consulta <- 'SELECT * FROM "Analytics Layer".Infraestrutura.Profissionais."Profi
 oferta_GO <- sqlQuery(channel, consulta, 
                      as.is = TRUE)
 
+
+```
+```{r}
 
 producao_SISAB <- read_excel("producao_SISAB.xls") %>% 
                       select(Cod_Regiao_Saude, Porcentagem)
@@ -78,6 +154,7 @@ producao_SISAB$Cod_Regiao_Saude = as.character(producao_SISAB$Cod_Regiao_Saude)
 ```{r}
 
 oferta <- oferta_GO %>% 
+  mutate(cod_regsaud = as.character(cod_regsaud)) |> 
   mutate(ano_mes = ym(COMPETEN)) %>% 
   mutate(horas = HORAOUTR + HORAHOSP + HORA_AMB) %>% 
   mutate(prof = if_else(substr(CBO, 1, 4) == "2235", "Enfermeiro", "Médico")) %>% 
@@ -110,7 +187,10 @@ demanda_oferta <-
             demanda = sum(fte40_demanda),
             oferta = sum(liquido)) %>% 
   filter(ano == '2024') %>% 
-  mutate(perc = (oferta * 100)/demanda)
+  mutate(perc = (oferta * 100)/demanda) %>% 
+  mutate(id = as.integer(regiao)) %>% 
+  ungroup() %>% 
+  select(id, prof, resultado, perc)
 
 
 ```
@@ -119,22 +199,34 @@ demanda_oferta <-
 
 
 ```{r}
+
 spdf <- geojson_read("shape file regioes saude.json",  what = "sp")
+
 ```
 
 
 ```{r}
-library(broom)
 
-spdf@data$mystate = substr( spdf@data$code, 1, 2)
-spdf_region_6 = spdf[ spdf@data$est_id == "52" , ]
+spdf_region <- spdf[ spdf@data$est_id == "52" , ]
 
-spdf_fortified <- tidy(spdf_region_6)
 
-# Plot it
-library(ggplot2)
+spdf_fortified <- sf::st_as_sf(spdf_region)
 
-plot(spdf_fortified)
+spdf_fortified %>%
+  left_join(demanda_oferta, by = c("reg_id"="id")) %>%
+  ggplot() +
+  geom_sf(aes(fill = perc)) +
+  theme_minimal() +
+  scale_fill_gradient(low = "#F8766D", high = "#00BA38") +
+  facet_wrap(~prof, nrow = 1) +
+  theme(
+    axis.line = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  )
 
 ```
 
