@@ -36,7 +36,7 @@ predictions <- read_excel("~/GitHub/dimensionamento/05_Gestantes/05_python/previ
 health_insurance <- read_csv("~/GitHub/dimensionamento/05_Gestantes/05_python/beneficiarios_plano_saude.csv") |>  
          filter(mes == "06") |>  
          mutate(perc_sus = (100 - percentual_pop_coberta)/100) |>  
-         select(cod_regsaud, perc_sus) 
+         select(cod_regsaud, perc_sus, regiao_saude) 
 
 predictions <- 
   predictions |>  
@@ -56,20 +56,26 @@ We will now quantify the number and variety of services need to assist pregnant 
 #| echo: false
 #| warning: false
 
-servicos <- vroom::vroom("servicos.csv") |> select(-`...1`)
+services <- vroom::vroom("servicos_correto.csv") |> 
+                select(-`...1`) 
 
 ```
 
 ```{r}
 #| eval: false
-for(i in 1:nrow(previsoes_go)){
-  row <- previsoes_go[i,]
+for(i in 1:nrow(predictions)){
+  row <- predictions[i,]
   url = paste("http://200.137.215.27:5025/calcula_procedimentos?mes_ano=", 
               substring(row$data, 1, 7), 
               "&nascidos_vivos=", 
               round(row$qtd_sus, 0), sep = '')
   temp <- fromJSON(url)
-  servicos <- rbind(temp, servicos) 
+  temp$data <- row$data
+  temp$qtd <- row$qtd_sus
+  temp$ibge <- row$codibge
+  
+  servicos <- rbind(temp, servicos)
+  
   print(paste("Chamando:",url))
 }
 
@@ -77,14 +83,66 @@ for(i in 1:nrow(previsoes_go)){
 
 ## PHC Services and professionals
 
-Vamos selecionar apenas os serviços realizados na APS. Em sequência, vamos selecionar apenas aqueles que são executados por médicos ou enfermeiros. Para isso vamos utilizar como referência nossa tabela que relaciona procedimentos e profissionais. 
+We will filter only services on the PHC setting. 
+
+We then will filter only those performed by registered nurses and physicians. We need to join two dataframes: professionals and procedures.  
+
+We will transform the number of procedures in number of hours considering past experiences published. Using time motion techniques Bonfim et al. (2014) registered that nursing appointments (consultas) take about 25,3 minutes (Brazil average) in the PHC setting. Educative actions take about 73 minutes.    
 
 ```{r}
 
-servicos <- servicos |> 
+phc_services <- services |> 
                 filter(nivel_atencao == "APS")
 
+procedures_professional <- read_excel("~/GitHub/dimensionamento/05_Gestantes/05_python/calendario-procedimentos.xlsx", 
+    sheet = "procedimentos_profissionais") |> 
+                            select(codigo_sigtap, categoria, CBO) |> 
+                            mutate(codigo_sigtap = as.numeric(codigo_sigtap)) 
+
+# procedures performed by two cadres will be split equally among them 
+
+qtt_professional <- 
+  procedures_professional |> 
+  group_by(codigo_sigtap) |> 
+  count() |> 
+  mutate(n = case_when(codigo_sigtap == '301010080' ~ n/10,
+                       codigo_sigtap == '101010010' ~ n/2,
+                       TRUE ~ n))
+
+
+
+# filter for only procedures performed by nurses and physicians 
+# filter only appointments and educative actions
+# filter only those procedures executed in the year of 2024. 
+# create new variable (procedures in hours)
+
+professional_services <- phc_services |> 
+                            left_join(qtt_professional, by = "codigo_sigtap") |> 
+                            mutate(qtt_cadre = quantidade/n) |> 
+                            left_join(procedures_professional, by = "codigo_sigtap") |> 
+                            filter(categoria == "Enfermeiro" | categoria == "Médico") |> 
+                            filter(tipo_procedimento == "Consultas ou Visitas" |
+                                   tipo_procedimento == "Ações Educacionais") |> 
+                            mutate(ano = year(mês_procedimento_realizado)) |> 
+                            filter(ano == 2024) |> 
+                            mutate(tempo = if_else(tipo_procedimento == "Consultas ou Visitas",
+                                                   qtt_cadre * 0.427,
+                                                   qtt_cadre * 1.266))
+
 ```
+
+Now we will transform this hours in professional 
+
+```{r}
+
+professional_services |> 
+        select(ano, mês_procedimento_realizado, ibge, CBO, categoria, tempo) |> 
+        mutate(fte40 = tempo/126)
+
+```
+
+
+
 
 
 
@@ -227,6 +285,28 @@ spdf_fortified %>%
     axis.title.x = element_blank(),
     axis.title.y = element_blank()
   )
+
+```
+
+
+```{r}
+
+cobertura <- read_delim("cobertura.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+```
+
+
+```{r}
+
+cobertura_demanda_oferta <- 
+  cobertura |> 
+  select(CO_CIR, NO_REGIAO_SAUDE, PC_COBERTURA_AB, PC_COBERTURA_SF) |> 
+  left_join(demanda_oferta, by = c("CO_CIR"="id"))
+
+
+cobertura_demanda_oferta |> 
+  ggplot(aes(PC_COBERTURA_AB, perc)) + geom_smooth(method = 'lm', se = FALSE) + geom_label(aes(label = NO_REGIAO_SAUDE)) + theme_minimal() + facet_wrap(~prof)
 
 ```
 
