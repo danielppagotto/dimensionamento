@@ -109,8 +109,6 @@ qtt_professional <-
                        codigo_sigtap == '101010010' ~ n/2,
                        TRUE ~ n))
 
-
-
 # filter for only procedures performed by nurses and physicians 
 # filter only appointments and educative actions
 # filter only those procedures executed in the year of 2024. 
@@ -135,9 +133,12 @@ Now we will transform this hours in professional
 
 ```{r}
 
-professional_services |> 
+demanda <- professional_services |> 
         select(ano, mês_procedimento_realizado, ibge, CBO, categoria, tempo) |> 
-        mutate(fte40 = tempo/126)
+        mutate(fte40 = tempo/126) |> 
+        group_by(ano, mês_procedimento_realizado, ibge, CBO, categoria) |> 
+        summarise(tempo_total = sum(tempo),
+                  fte40_demanda = sum(fte40))
 
 ```
 
@@ -147,6 +148,8 @@ professional_services |>
 
 
 ## Lendo os dados de **demanda** e filtrando apenas observações necessárias
+
+OBSERVAÇÃO: AQUI TEMOS OS DADOS DE DEMANDA CONFORME A LEITURA DOS DADOS QUE FIZ NO PYTHON 
 
 ```{r}
 #| warning: false
@@ -199,6 +202,9 @@ oferta_GO <- sqlQuery(channel, consulta,
 
 
 ```
+
+
+
 ```{r}
 
 producao_SISAB <- read_excel("producao_SISAB.xls") %>% 
@@ -231,24 +237,26 @@ oferta <- oferta_GO %>%
 
 ```{r}
 
+demanda$ibge <- as.character(demanda$ibge)
+
 demanda_oferta <- 
   demanda %>%  
-  left_join(oferta, by = c("regiao"="cod_regsaud",
-                           "prof"="prof",
+  left_join(oferta, by = c("ibge"="cod_regsaud",
+                           "categoria"="prof",
                            "mês_procedimento_realizado"="ano_mes_corrigido")) %>% 
   filter(uf != "NA") %>% 
   mutate(ano = year(mês_procedimento_realizado)) %>% 
   mutate(resultado = liquido - fte40_demanda) %>% 
-  group_by(regiao, ano, prof,
+  group_by(ibge, ano, categoria,
            uf, regiao_saude) %>% 
   summarise(resultado = sum(resultado),
             demanda = sum(fte40_demanda),
             oferta = sum(liquido)) %>% 
   filter(ano == '2024') %>% 
   mutate(perc = (oferta * 100)/demanda) %>% 
-  mutate(id = as.integer(regiao)) %>% 
+  mutate(id = as.integer(ibge)) %>% 
   ungroup() %>% 
-  select(id, prof, resultado, perc)
+  select(id, categoria, resultado, perc)
 
 
 ```
@@ -272,11 +280,12 @@ spdf_fortified <- sf::st_as_sf(spdf_region)
 
 spdf_fortified %>%
   left_join(demanda_oferta, by = c("reg_id"="id")) %>%
+  mutate(categoria = if_else(categoria == "Médico","Physician","Nurse")) |> 
   ggplot() +
   geom_sf(aes(fill = perc)) +
   theme_minimal() +
   scale_fill_gradient(low = "#F8766D", high = "#00BA38") +
-  facet_wrap(~prof, nrow = 1) +
+  facet_wrap(~categoria, nrow = 1) +
   theme(
     axis.line = element_blank(),
     axis.text.x = element_blank(),
@@ -284,7 +293,7 @@ spdf_fortified %>%
     axis.ticks = element_blank(),
     axis.title.x = element_blank(),
     axis.title.y = element_blank()
-  )
+  ) + ggtitle("Supply vs Demand", "Nurses and Physician for Maternal and Newborn Assistance in the Primary Health Care Context")
 
 ```
 
