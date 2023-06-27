@@ -306,7 +306,7 @@ spdf <- geojson_read("shape file regioes saude.json",  what = "sp")
 
 
 ```{r}
-#|warning: false
+#| warning: false
 
 spdf_region <- spdf[ spdf@data$est_id == "52" , ]
 
