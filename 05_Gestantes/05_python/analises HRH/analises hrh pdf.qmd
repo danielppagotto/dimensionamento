@@ -1,0 +1,375 @@
+---
+title: "Needs-based health workforce planning for pregnancy care in Brazil"
+author: "Daniel Pagotto"
+format: pdf
+editor: visual
+---
+
+```{r}
+#| warning: false
+#| echo: false
+
+library(tidyverse)
+library(readxl)
+library(geojsonio)
+library(broom)
+library(jsonlite)
+library(RODBC)
+
+```
+
+# Calculating Demand
+
+## Target Population
+
+At first we will access SINASC projections data. These projections were calculated by two co-authors. Multilayer Perceptron (MLP) algorithm registered the best results among other machine learning and statistics technics.  
+
+We will deduce the population covered by health insurance.   
+
+```{r}
+#| warning: false 
+
+#reading and selecting variables
+predictions <- read_excel("~/GitHub/dimensionamento/05_Gestantes/05_python/previsoes_go.xlsx") |>   
+               select(codibge, data, qtd) |> 
+               mutate(qtd = round(qtd))
+
+# reading health insurance data
+health_insurance <- read_csv("~/GitHub/dimensionamento/05_Gestantes/05_python/beneficiarios_plano_saude.csv") |>  
+         filter(mes == "06") |>  
+         mutate(perc_sus = (100 - percentual_pop_coberta)/100) |>  
+         select(cod_regsaud, perc_sus, regiao_saude) 
+
+# joining both dataframes to deduce the population covered by health insurance
+predictions <- 
+  predictions |>  
+  left_join(health_insurance, by = c("codibge"="cod_regsaud")) |>  
+  mutate(qtd_sus = round(qtd * perc_sus)) |> 
+  mutate(data = as.character(data))
+
+DT::datatable(predictions)
+
+```
+
+## Total services 
+
+We will now quantify the number and variety of services need to assist pregnant women and the newborn in the primary health care (PHC) setting. 
+
+For each birth we will calculate a number of service needed before and after the event.  
+
+```{r include=FALSE}
+#| echo: false
+#| warning: false
+
+services <- vroom::vroom("servicos_correto.csv") |> 
+                select(-`...1`) 
+
+DT::datatable(services)
+
+```
+
+```{r}
+#| eval: false
+for(i in 1:nrow(predictions)){
+  row <- predictions[i,]
+  url = paste("http://200.137.215.27:5025/calcula_procedimentos?mes_ano=", 
+              substring(row$data, 1, 7), 
+              "&nascidos_vivos=", 
+              round(row$qtd_sus, 0), sep = '')
+  temp <- fromJSON(url)
+  temp$data <- row$data
+  temp$qtd <- row$qtd_sus
+  temp$ibge <- row$codibge
+  
+  servicos <- rbind(temp, servicos)
+  
+  print(paste("Chamando:",url))
+}
+
+```
+
+## PHC Services and professionals
+
+We will filter only services on the PHC setting. 
+
+We then will filter only those performed by registered nurses and physicians. We need to join two dataframes: professionals and procedures.  
+
+We will transform the number of procedures in number of hours considering past experiences published. Using time motion techniques Bonfim et al. (2014) registered that nursing appointments  took about 25,3 minutes (Brazil average) in the PHC setting. Educative actions took about 73 minutes. We will use these number as reference. 
+
+```{r}
+#| warning: false
+
+# filter just PHC setting
+phc_services <- services |> 
+                filter(nivel_atencao == "APS")
+
+# loading dataframe which combines procedures and the respective professional
+procedures_professional <- read_excel("~/GitHub/dimensionamento/05_Gestantes/05_python/calendario-procedimentos.xlsx", 
+    sheet = "procedimentos_profissionais") |> 
+                            select(codigo_sigtap, categoria, CBO) |> 
+                            mutate(codigo_sigtap = as.numeric(codigo_sigtap)) 
+
+# procedures performed by two cadres will be split equally among them 
+# the procedure 301010080 is growth and development consultation. It is divided by 10 because the same procedure id is used for all procedure.  
+
+qtt_professional <- 
+  procedures_professional |> 
+  group_by(codigo_sigtap) |> 
+  count() |> 
+  mutate(n = case_when(codigo_sigtap == '301010080' ~ n/10,
+                       codigo_sigtap == '101010010' ~ n/2,
+                       TRUE ~ n))
+# In the following code:
+# 1) filter for only procedures performed by nurses and physicians 
+# 2) calculate the number of procedures exclusive by cadre according to the last
+# code
+# 3) filter only appointments and educative actions
+# 4) filter only those procedures executed in the year of 2024. 
+# 5) create new variable (procedures in hours)
+
+professional_services <- phc_services |> 
+                            left_join(qtt_professional, by = "codigo_sigtap") |> 
+                            mutate(qtt_cadre = quantidade/n) |> 
+                            left_join(procedures_professional, by = "codigo_sigtap") |> 
+                            filter(categoria == "Enfermeiro" | categoria == "Médico") |> 
+                            filter(tipo_procedimento == "Consultas ou Visitas" |
+                                   tipo_procedimento == "Ações Educacionais") |> 
+                            mutate(ano = year(mês_procedimento_realizado)) |> 
+                            filter(ano == 2024) |> 
+                            mutate(tempo = if_else(tipo_procedimento == "Consultas ou Visitas",
+                                                   qtt_cadre * 0.427,
+                                                   qtt_cadre * 1.266))
+
+DT::datatable(professional_services)
+
+```
+
+Now we will transform the total demand of procedures into number of 40 hour full-time equivalent professionals. 
+
+We will divide the full time required by procedures by 126 which is the total available time for each month by professional. 
+
+```{r}
+#| warning: false
+
+demanda <- professional_services |> 
+        select(ano, mês_procedimento_realizado, ibge, CBO, categoria, tempo) |> 
+        mutate(fte40 = tempo/126) |> 
+        group_by(ano, mês_procedimento_realizado, ibge, CBO, categoria) |> 
+        summarise(tempo_total = sum(tempo),
+                  fte40_demanda = sum(fte40),
+                  fte40_demanda = round(fte40_demanda, 2))
+
+DT::datatable(demanda)
+
+```
+
+```{r}
+#| warning: false
+#| eval: false
+#| include: false
+
+## Lendo os dados de **demanda** e filtrando apenas observações necessárias
+# OBSERVAÇÃO: AQUI TEMOS OS DADOS DE DEMANDA CONFORME A LEITURA DOS DADOS QUE FIZ NO PYTHON 
+
+
+cegonha_go <- read_csv("df_prof_go.csv") |> 
+                  filter(nivel_atencao == 'APS') |> 
+                  select(regiao, mês_procedimento_realizado, CBO,
+                         horas_categoria, fte40) |> 
+                    mutate(prof = case_when(substr(CBO, 1, 4) == "2235" ~ "Enfermeiro",
+                                            substr(CBO, 1, 4) == "2251" ~ "Médico",
+                                            TRUE ~ "Outros")) |> 
+                    filter(prof != "Outros") 
+
+demanda_py <- cegonha_go |> 
+  group_by(regiao, mês_procedimento_realizado,
+           prof) |> 
+  summarise(fte40_demanda = sum(fte40)) |> 
+  mutate(regiao = as.character(regiao)) |> 
+  filter(mês_procedimento_realizado > "2021-01-01")
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+oferta_GO <- vroom::vroom("oferta_go.csv") |> select(-`...1`)
+
+```
+
+# Reading current professional supply 
+
+```{r}
+#| warning: false
+#| eval: false
+
+dremio_host <- Sys.getenv("endereco")
+dremio_port <- Sys.getenv("port")
+dremio_uid <- Sys.getenv("uid")
+dremio_pwd <- Sys.getenv("datalake")
+
+channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
+
+consulta <- 'SELECT * FROM "Analytics Layer".Infraestrutura.Profissionais."Profissionais APS"'
+
+oferta_GO <- sqlQuery(channel, consulta, 
+                     as.is = TRUE)
+
+```
+
+We will deduce the supply considering only the workload performed to assist pregnant and newborn care.
+
+We used a proxy number according to the volume of consultation for pregnant and newborn care in the SISAB. 
+
+```{r}
+
+producao_SISAB <- read_excel("producao_SISAB.xls") |> 
+                      select(Cod_Regiao_Saude, Porcentagem)
+
+producao_SISAB$Cod_Regiao_Saude = as.character(producao_SISAB$Cod_Regiao_Saude)
+```
+
+## Transforming supply data
+
+Our supply dataset will eventually have duplicate values due to multiple cadre association. In order to overcome this issue, we use a standard of full time equivalent metric.  
+
+We multiply the value by four to represent the monthly workload. Next, we transform the number of hours into professional hours, dividing the value by 126 hours. In this way, if we have 3,040 hours of a professional available in a month, it would be the equivalent of having 24 professionals of 40 hours.
+
+We also deduct the total workload dedicated to direct activities (assistance). We used as a reference 60% based on past studies.
+
+We also deduct the percentage dedicated exclusively to activities to assist pregnant women and newborns. As previously presented, we used SISAB data to assess the volume of assistance to this public in comparison to others.
+
+```{r}
+
+oferta <- oferta_GO |> 
+  mutate(cod_regsaud = as.character(cod_regsaud)) |> 
+  mutate(ano_mes = ym(COMPETEN)) |> 
+  mutate(horas = HORAOUTR + HORAHOSP + HORA_AMB) |> 
+  mutate(prof = if_else(substr(CBO, 1, 4) == "2235", "Enfermeiro", "Médico")) |> 
+  group_by(uf, cod_regsaud, regiao_saude, prof, ano_mes) |> 
+  summarise(horas = 4 * sum(horas)) |> 
+  left_join(producao_SISAB, by = c("cod_regsaud"="Cod_Regiao_Saude")) |> 
+  mutate(fte40 = horas/126) |> 
+  mutate(direto = (fte40) * 0.60) |> 
+  mutate(liquido = direto * Porcentagem) |> 
+  mutate(ano_mes_corrigido = ano_mes + years(2)) |> 
+  select(-ano_mes) 
+
+DT::datatable(oferta)
+
+```
+
+# Comparing demand and supply 
+
+We will now compare demand vs supply for each health region. the `result` metric represents the subtraction between the deduced supply and the demand. 
+
+The `perc` metric represents how much supply is currently available to meet, in percentage terms, the total demand needed in the future (2024). 
+
+```{r}
+
+demanda$ibge <- as.character(demanda$ibge)
+
+demanda_oferta <- 
+  demanda |>  
+  left_join(oferta, by = c("ibge"="cod_regsaud",
+                           "categoria"="prof",
+                           "mês_procedimento_realizado"="ano_mes_corrigido")) |> 
+  filter(uf != "NA") |> 
+  mutate(ano = year(mês_procedimento_realizado)) |> 
+  mutate(resultado = liquido - fte40_demanda) |> 
+  group_by(ibge, ano, categoria,
+           uf, regiao_saude) |> 
+  summarise(resultado = sum(resultado),
+            demanda = sum(fte40_demanda),
+            oferta = sum(liquido)) |> 
+  mutate(resultado = round(resultado, 2)) |> 
+  filter(ano == '2024') |> 
+  mutate(perc = (oferta * 100)/demanda,
+         perc = round(perc, 2)) |> 
+  mutate(id = as.integer(ibge)) |> 
+  ungroup() |> 
+  select(id, regiao_saude, categoria, resultado, perc)
+
+DT::datatable(demanda_oferta)
+
+```
+
+## Map of health regions
+
+We will now ilustrate the results, in terms of percentage, using a map.
+
+```{r}
+
+spdf <- geojson_read("shape file regioes saude.json",  what = "sp")
+
+```
+
+
+```{r}
+#| warning: false
+
+spdf_region <- spdf[ spdf@data$est_id == "52" , ]
+
+
+spdf_fortified <- sf::st_as_sf(spdf_region)
+
+spdf_fortified |>
+  left_join(demanda_oferta, by = c("reg_id"="id")) |>
+  mutate(categoria = if_else(categoria == "Médico","Physician","Nurse")) |> 
+  ggplot() +
+  geom_sf(aes(fill = perc)) +
+  theme_minimal() +
+  scale_fill_gradient(low = "#F8766D", high = "#00BA38", n.breaks = 10) +
+  facet_wrap(~categoria, nrow = 1) +
+  theme(
+    axis.line = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  ) + ggtitle("Supply vs Demand", "Nurses and Physician for Maternal and Newborn Assistance in the Primary Health Care Context")
+
+```
+
+# Looking for some reasons for discussion
+
+```{r}
+#| warning: false
+
+cobertura <- read_delim("cobertura.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+```
+
+
+```{r}
+#| warning: false
+
+cobertura_demanda_oferta <- 
+  cobertura |> 
+  select(CO_CIR, NO_REGIAO_SAUDE, PC_COBERTURA_AB, PC_COBERTURA_SF) |> 
+  left_join(demanda_oferta, by = c("CO_CIR"="id"))
+```
+
+
+```{r}
+#| warning: false
+ 
+cobertura_demanda_oferta |> 
+  filter(categoria == "Enfermeiro") |> 
+  ggplot(aes(PC_COBERTURA_AB, perc)) + geom_smooth(method = 'lm', se = FALSE) +
+  geom_label(aes(label = NO_REGIAO_SAUDE)) + theme_minimal()
+```
+
+
+```{r}
+#| warning: false
+
+cobertura_demanda_oferta |> 
+  filter(categoria == "Médico") |> 
+  ggplot(aes(PC_COBERTURA_AB, perc)) + geom_smooth(method = 'lm', se = FALSE) +
+  geom_label(aes(label = NO_REGIAO_SAUDE)) + theme_minimal() 
+```
+
