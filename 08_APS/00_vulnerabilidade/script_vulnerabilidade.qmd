@@ -1,12 +1,14 @@
 ---
-title: "Juntando SISAB e dados da SAPS"
+title: "Metodologia - APS"
 format: html
 editor: visual
 ---
 
+# Calculando Demanda
+
 ## Tratamento dados APS
 
-O objetivo do presente script é realizar um tratamento para juntar as tabelas contendo população vulnerável (disponibilizado pela SAPS) e população vinculada à APS em cada município (extraído no SISAB).
+O objetivo do presente script é realizar um tratamento para juntar as tabelas contendo população vulnerável (disponibilizado pela SAPS) e população vinculada à APS em cada município (extraímos no SISAB).
 
 ```{r}
 #| warning: false
@@ -14,115 +16,227 @@ O objetivo do presente script é realizar um tratamento para juntar as tabelas c
 library(tidyverse)
 library(readxl)
 
+# extração enviada que extraímos do SISAB
 cadastro_pop_sisab <- read_excel("~/GitHub/dimensionamento/08_APS/bases/cadastro-individual_aps.xls")
 
 cadastro_pop_sisab$CNES <- as.integer(cadastro_pop_sisab$CNES)
 
+# extração da população vulnerável enviada pela SAPS
 pop_vulneravel_previne_202212 <- read_excel("~/GitHub/dimensionamento/08_APS/bases/pop_vulneravel_previne_202212.xlsx")
 
 pop_vulneravel_previne_202212$CO_CNES <- as.integer(pop_vulneravel_previne_202212$CO_CNES)
 
 ```
 
-Juntando as duas bases
+Vamos juntar as duas bases e selecionar e selecionar apenas as variáveis importantes:
 
 ```{r}
 
-sisab <- cadastro_pop_sisab %>% 
-            left_join(pop_vulneravel_previne_202212, by = c("CNES"="CO_CNES")) %>% 
-            janitor::clean_names() %>% 
+#| warning: false
+
+sisab <- cadastro_pop_sisab |> 
+            left_join(pop_vulneravel_previne_202212, by = c("CNES"="CO_CNES")) |> 
+            janitor::clean_names() |> 
             select(uf, ibge, municipio, cnes, estabelecimento, 
-                   pop_vinc, qt_bnf_auxilio_brasil, qt_beneficiarios) %>% 
-            mutate(pop_vinc = as.numeric(pop_vinc)) %>% 
+                   pop_vinc, qt_bnf_auxilio_brasil) |> 
+            mutate(pop_vinc = as.numeric(pop_vinc)) |> 
             mutate(perc_benef_pbf = qt_bnf_auxilio_brasil/pop_vinc,
-                   perc_benef_previne = qt_beneficiarios/pop_vinc)
+                   perc_benef_pbf = round(perc_benef_pbf, 2))
 
 ```
 
-Agora vamos calcular o grau de vulnerabilidade de cada unidade por município. Vamos fazer um exemplo para Águas Lindas de Goiás.
+Descrição das variáveis
+
+-   **uf**: a unidade da federação a qual a unidade está vinculada
+
+-   **ibge**: código IBGE que identifica o município
+
+-   **municipio**: nome do município
+
+-   **cnes**: código que identifica um estabelecimento de saúde
+
+-   **estabelecimento**: nome do estabelecimento
+
+-   **pop_vinc**: população vinculada ao estabelecimento de saúde (**no** **SisDim: essa variável vem por default da base, mas pode ser ajustada pelo usuário**)
+
+-   **qt_bnf_beneficiarios_auxilio_brasil**: população vinculada ao estabelecimento de saúde que é beneficiária do auxílio brasil (**atentar, pois voltou a ser bolsa família**)
+
+-   **perc_benef_pbf**: percentual da população vinculada que é beneficiária do auxílio brasil (atentar, pois voltou a ser bolsa família. Por isso que a sigla agora é PBF - programa bolsa família).
+
+## Classificar a vulnerabilidade dos municípios
+
+Dentro de cada município, temos várias unidades de saúde. Cada uma delas possui uma classificação de vulnerabilidade. Essa classificação é baseada na variável `perc_benef_pbf`.
+
+Aplicamos uma divisão em percentis para separar os recortes de alta, média e baixa vulnerabilidade. **Atenção: no SisDim o usuário pode configurar para ter cinco recortes de vulnerabilidade (muita baixa, baixa, média, alta, muito alta). Nesses casos, ao invés de usar estes percentis, teremos que aplicar os percentil 20, 40, 60 e 80**
+
+observação: O cálculo de R demora um pouco. Talvez seja o caso de já deixar calculado - tanto para 3 estratos de vulnerabilidade, quanto para 5 estratos.
 
 ```{r}
 
-aguas_lindas <- 
-  sisab %>% 
-  filter(ibge == '520025') %>% 
-  mutate(classificacao_pbf = case_when(perc_benef_pbf <= quantile(perc_benef_pbf, 0.33) ~ 'baixa vulnerabilidade',
-                                   perc_benef_pbf > quantile(perc_benef_pbf, 0.33) & 
-                                   perc_benef_pbf <= quantile(perc_benef_pbf, 0.66) ~ 'média vulnerabilidade',
-                                   perc_benef_pbf > quantile(perc_benef_pbf, 0.66) ~ 'alta vulnerabilidade')) %>% 
-  mutate(classificacao_previne = case_when(perc_benef_previne <= quantile(perc_benef_previne, 0.33) ~ 'baixa vulnerabilidade',
-                                   perc_benef_previne > quantile(perc_benef_previne, 0.33) & 
-                                   perc_benef_previne <= quantile(perc_benef_previne, 0.66) ~ 'média vulnerabilidade',
-                                   perc_benef_previne > quantile(perc_benef_previne, 0.66) ~ 'alta vulnerabilidade'))
-
+vulnerabilidade <- 
+  sisab |> 
+  filter(perc_benef_pbf != "NA") |> 
+  mutate(classificacao_pbf = 
+           case_when(perc_benef_pbf <= quantile(perc_benef_pbf, 0.33) ~ 'baixa vulnerabilidade',
+                     perc_benef_pbf > quantile(perc_benef_pbf, 0.33) & 
+                     perc_benef_pbf <= quantile(perc_benef_pbf, 0.66) ~ 'média vulnerabilidade',
+                     perc_benef_pbf > quantile(perc_benef_pbf, 0.66) ~ 'alta vulnerabilidade'), 
+         .by = c(uf, ibge, municipio)) 
 
 ```
 
-Vamos aplicar a lógica para todos os municípios.
+A quantidade de equipes por unidade de saúde depende da população e do grau de vulnerabilidade. Basta dividir a população por um parâmetro que varia de 2000 (locais de alta vulnerabilidade) a 3500 (locais de baixa vulnerabilidade). **Atenção: no SisDim esses valores podem ser alterados e mantidos dentro de um intervalo**. Esses cálculos estão no primeiro `mutate` abaixo.
+
+A quantidade profissionais por equipe são definidos pela Política Nacional de Atenção Básica (PNAB) de 2017. De acordo com essa política, precisamos de um número de profissionais por equipe. Esses cálculos estão no segundo `mutate` abaixo.
+
+-   Um médico por equipe
+
+-   Um enfermeiro por equipe
+
+-   A PNAB não expressa quantos técnicos tem por equipe. Por default estamos colocando dois. **Atenção: no SisDim esse número tem que ser aberto, pois podemos adotar um ou dois**
+
+-   O número de agentes comunitários de saúde (ACS) deve ser de um para até 750 indivíduos. **Atenção: no SisDim esse número tem que ser aberto, variando de 100 para 750**
+
+    Não temos definição quanto ao total de outras categorias na PNAB, mas o material Planejamento e Dimensionamento da Força de Trabalho em Saúde: Material didático para secretarias de saúde (2020) traz alguns parâmetros para. **Atenção: Por hora não vamos incluir esses profissionais. Mas pode ser que no futuro nos peçam para adicionar.**
+
+-   Um cirurgião dentista por equipe
+
+-   Um técnico/auxiliar de saúde bucal (ASB ou TSB) por equipe
 
 ```{r}
-teste <- 
-sisab %>% 
-  filter(perc_benef_pbf != "NA") %>% 
-  mutate(classificacao_pbf = case_when(perc_benef_pbf <= quantile(perc_benef_pbf, 0.33) ~ 'baixa vulnerabilidade',
-                                   perc_benef_pbf > quantile(perc_benef_pbf, 0.33) & 
-                                   perc_benef_pbf <= quantile(perc_benef_pbf, 0.66) ~ 'média vulnerabilidade',
-                                   perc_benef_pbf > quantile(perc_benef_pbf, 0.66) ~ 'alta vulnerabilidade'), .by = c(uf, ibge, municipio)) %>% 
-  mutate(classificacao_previne = case_when(perc_benef_previne <= quantile(perc_benef_previne, 0.33) ~ 'baixa vulnerabilidade',
-                                   perc_benef_previne > quantile(perc_benef_previne, 0.33) & 
-                                   perc_benef_previne <= quantile(perc_benef_previne, 0.66) ~ 'média vulnerabilidade',
-                                   perc_benef_previne > quantile(perc_benef_previne, 0.66) ~ 'alta vulnerabilidade'), .by = c(uf, ibge, municipio))
-
-
-```
-
-Agora vamos determinar a quantidade de equipes de acordo com o grau de vulnerabilidade
-
-```{r}
+#| warning: false
 
 equipes <- 
-  teste %>% 
+  vulnerabilidade |> 
     mutate(equipes_pbf = case_when(classificacao_pbf == 'baixa vulnerabilidade' ~ pop_vinc/3500, 
                                classificacao_pbf == 'média vulnerabilidade' ~ pop_vinc/2500,
-                               classificacao_pbf == 'alta vulnerabilidade' ~ pop_vinc/2000)) %>% 
-    mutate(medicos_pbf = equipes_pbf,
-           enfermeiros_pbf = equipes_pbf,
-           tecnicos_pbf = 2 * equipes_pbf,
-           acs_pbf = pop_vinc/750) %>% 
-  mutate(equipes_previne = case_when(classificacao_previne == 'baixa vulnerabilidade' ~ pop_vinc/3500, 
-                               classificacao_previne == 'média vulnerabilidade' ~ pop_vinc/2500,
-                               classificacao_previne == 'alta vulnerabilidade' ~ pop_vinc/2000)) %>% 
-    mutate(medicos_previne = equipes_previne,
-           enfermeiros_previne = equipes_previne,
-           tecnicos_previne = 2 * equipes_previne,
-           acs_previne = pop_vinc/750)
+                               classificacao_pbf == 'alta vulnerabilidade' ~ pop_vinc/2000)) |> 
+    mutate(medicos = equipes_pbf,
+           enfermeiros = equipes_pbf,
+           tecnicos = 2 * equipes_pbf,
+           acs = pop_vinc/750
+           #cirurgiao_dentista = equipes_pbf,
+           #tsb = equipes_pbf
+           )
 
-# writexl::write_xlsx(equipes, 'equipes.xlsx')
+DT::datatable(equipes)
 
 ```
 
-Vamos determinar o número de profissionais por município considerando o número de equipes.
+*Talvez não é o caso de jogar isso já calculado no datalake? Isso pode ser mais performático?*
+
+# Oferta
+
+A consulta da oferta pode ser acessada [aqui](http://200.137.215.27:9047/space/Analytics%20Layer/folder/Infraestrutura/Profissionais) e tem o nome "Analytics Layer".Infraestrutura.Profissionais."Profissionais APS em equipes - 202301".
+
+Para fins de **exemplo**, vamos pegar apenas a oferta de Goiânia profissionais que estão em.
 
 ```{r}
+library(RODBC)
 
-prof_municipio <- 
-        equipes %>% 
-        group_by(uf, ibge, municipio) %>% 
-        summarise(total_equipe = sum(equipes_pbf),
-                  total_pop = sum(pop_vinc)) %>% 
-        mutate(medicos = total_equipe,
-               enfermeiros = total_equipe,
-               tecnicos = total_equipe * 2,
-               acs = total_pop/750)
+dremio_host <- Sys.getenv("endereco")
+dremio_port <- Sys.getenv("port")
+dremio_uid <- Sys.getenv("uid")
+dremio_pwd <- Sys.getenv("datalake")
 
-#writexl::write_xlsx(prof_municipio, 'municipios.xlsx')
+channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UID=%s;PWD=%s;AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", dremio_host, dremio_port, dremio_uid, dremio_pwd))
+
+consulta <- 'SELECT * FROM "Analytics Layer".Infraestrutura.Profissionais."Profissionais APS em equipes - 202301"'
+
+oferta_gyn <- sqlQuery(channel, consulta, 
+                     as.is = TRUE) |> 
+              filter(CO_MUNICIPIO_GESTOR == '520870')
 
 ```
 
+1.  Filtrar profissionais que estão vinculados a equipes
+
+2.  Somar as cargas horárias
+
+3.  Agrupar os profissionais por unidade e ocupação e somar as cargas horárias para depois dividir por 40. Essa divisão por 40 faz parte da transformação em FTE40.
+
+4.  Vamos padronizar os profissionais por família de CBO. Por isso usamos aquele `str_detect`
+
+5.  Por fim, selecionamos as variáveis importantes e guardamos em um objeto chamado oferta tratada
+
+```{r}
+#| warning: false
+
+oferta_gyn$QT_CARGA_HORARIA_AMBULATORIAL <- as.numeric(oferta_gyn$QT_CARGA_HORARIA_AMBULATORIAL)
+
+oferta_gyn$QT_CARGA_HORARIA_OUTROS <- as.numeric(oferta_gyn$QT_CARGA_HORARIA_OUTROS)
+
+oferta_gyn$QT_CARGA_HOR_HOSP_SUS <- as.numeric(oferta_gyn$QT_CARGA_HOR_HOSP_SUS)
+
+oferta_equipe <- oferta_gyn |>
+                    filter(grupo_equipe == 'ESFN' | 
+                            grupo_equipe == 'EAPN') |> 
+                    mutate(CH = QT_CARGA_HORARIA_AMBULATORIAL +
+                                QT_CARGA_HORARIA_AMBULATORIAL +
+                                QT_CARGA_HORARIA_OUTROS) |> 
+                    group_by(CO_MUNICIPIO_GESTOR, cnes_unidade, 
+                             unidade, tipo_equipe, cbo_profissional,
+                             ocupacao_profissional) |> 
+                    summarise(oferta_ch = sum(CH),
+                              oferta_ft40 = oferta_ch/40) |> 
+                    filter(str_detect(cbo_profissional, '^225') | 
+                           str_detect(cbo_profissional, '^2235')|
+                           str_detect(cbo_profissional, '^3222')|
+                           cbo_profissional == '515105') |> 
+                    mutate(categoria = 
+                             case_when(
+                               str_detect(cbo_profissional, '^225') ~ 'Médico',
+                               str_detect(cbo_profissional, '^2235') ~ 'Enfermeiro',
+                               str_detect(cbo_profissional, '^3222') ~ 'Tecnicos',
+                               str_detect(cbo_profissional, '^5151') ~ 'ACS')) 
+
+
+oferta_tratada <- oferta_equipe |> 
+      ungroup() |> 
+      select(CO_MUNICIPIO_GESTOR, cnes_unidade, unidade, 
+             categoria, oferta_ft40) |> 
+      group_by(CO_MUNICIPIO_GESTOR, cnes_unidade, 
+               unidade, categoria) |> 
+      summarise(oferta = sum(oferta_ft40))
+
+oferta_tratada$cnes_unidade <- as.integer(oferta_tratada$cnes_unidade)
+
+```
+
+# Comparando oferta e demanda
+
+Temos a demanda e temos a oferta de Goiânia. Então vamos juntar os dois lados - demanda e oferta - para comparar
+
+Demanda para Goiânia
+
+```{r}
+demanda_gyn <- equipes |> 
+                  filter(ibge == '520870') |> 
+                  select(uf, ibge, municipio, cnes,
+                         estabelecimento, equipes_pbf,
+                         medicos, enfermeiros, tecnicos, acs) |> 
+                  gather(key = "categoria", value = "demanda", 
+                         7:10) |> 
+                  mutate(profissional = case_when(
+                    str_detect(categoria, '^med') ~ 'Médico',
+                    str_detect(categoria, '^enfe') ~ 'Enfermeiro',
+                    str_detect(categoria, '^tecn') ~ 'Tecnicos',
+                    str_detect(categoria, '^acs') ~ 'ACS'))
+```
+
+Juntando demanda e oferta e substraindo os resultados.
+
 ```{r}
 
-teste_go <- teste %>% 
-              group_by(uf, municipio) %>% 
-              count()
+resultado <- 
+  demanda_gyn |> 
+  left_join(oferta_tratada, 
+            by = c("cnes"="cnes_unidade",
+                   "profissional"="categoria")) |> 
+  select(uf, ibge, municipio, cnes, estabelecimento, profissional, 
+         demanda, oferta) |> 
+  mutate(resultado = oferta - demanda)
 
+
+DT::datatable(resultado)
 ```

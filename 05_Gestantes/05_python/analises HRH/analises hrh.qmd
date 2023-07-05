@@ -14,6 +14,7 @@ library(geojsonio)
 library(broom)
 library(jsonlite)
 library(RODBC)
+library(patchwork)
 
 ```
 
@@ -21,9 +22,9 @@ library(RODBC)
 
 ## Target Population
 
-At first we will access SINASC projections data. These projections were calculated by two co-authors. Multilayer Perceptron (MLP) algorithm registered the best results among other machine learning and statistics technics.  
+At first we will access SINASC projections data. These projections were calculated by two co-authors. Multilayer Perceptron (MLP) algorithm registered the best results among other machine learning and statistics technics.
 
-We will deduce the population covered by health insurance.   
+We will deduce the population covered by health insurance.
 
 ```{r}
 #| warning: false 
@@ -50,11 +51,11 @@ DT::datatable(predictions)
 
 ```
 
-## Total services 
+## Total services
 
-We will now quantify the number and variety of services need to assist pregnant women and the newborn in the primary health care (PHC) setting. 
+We will now quantify the number and variety of services need to assist pregnant women and the newborn in the primary health care (PHC) setting.
 
-For each birth we will calculate a number of service needed before and after the event.  
+For each birth we will calculate a number of service needed before and after the event.
 
 ```{r include=FALSE}
 #| echo: false
@@ -89,11 +90,11 @@ for(i in 1:nrow(predictions)){
 
 ## PHC Services and professionals
 
-We will filter only services on the PHC setting. 
+We will filter only services on the PHC setting.
 
-We then will filter only those performed by registered nurses and physicians. We need to join two dataframes: professionals and procedures.  
+We then will filter only those performed by registered nurses and physicians. We need to join two dataframes: professionals and procedures.
 
-We will transform the number of procedures in number of hours considering past experiences published. Using time motion techniques Bonfim et al. (2014) registered that nursing appointments  took about 25,3 minutes (Brazil average) in the PHC setting. Educative actions took about 73 minutes. We will use these number as reference. 
+We will transform the number of procedures in number of hours considering past experiences published. Using time motion techniques Bonfim et al. (2014) registered that nursing appointments took about 25,3 minutes (Brazil average) in the PHC setting. Educative actions took about 73 minutes. We will use these number as reference.
 
 ```{r}
 #| warning: false
@@ -144,9 +145,9 @@ DT::datatable(professional_services)
 
 ```
 
-Now we will transform the total demand of procedures into number of 40 hour full-time equivalent professionals. 
+Now we will transform the total demand of procedures into number of 40 hour full-time equivalent professionals.
 
-We will divide the full time required by procedures by 126 which is the total available time for each month by professional. 
+We will divide the full time required by procedures by 126 which is the total available time for each month by professional.
 
 ```{r}
 #| warning: false
@@ -220,7 +221,7 @@ oferta_GO <- sqlQuery(channel, consulta,
 
 We will deduce the supply considering only the workload performed to assist pregnant and newborn care.
 
-We used a proxy number according to the volume of consultation for pregnant and newborn care in the SISAB. 
+We used a proxy number according to the volume of consultation for pregnant and newborn care in the SISAB.
 
 ```{r}
 
@@ -232,7 +233,7 @@ producao_SISAB$Cod_Regiao_Saude = as.character(producao_SISAB$Cod_Regiao_Saude)
 
 ## Transforming supply data
 
-Our supply dataset will eventually have duplicate values due to multiple cadre association. In order to overcome this issue, we use a standard of full time equivalent metric.  
+Our supply dataset will eventually have duplicate values due to multiple cadre association. In order to overcome this issue, we use a standard of full time equivalent metric.
 
 We multiply the value by four to represent the monthly workload. Next, we transform the number of hours into professional hours, dividing the value by 126 hours. In this way, if we have 3,040 hours of a professional available in a month, it would be the equivalent of having 24 professionals of 40 hours.
 
@@ -266,11 +267,11 @@ DT::datatable(oferta)
 
 ```
 
-# Comparing demand and supply 
+# Comparing demand and supply
 
-We will now compare demand vs supply for each health region. the `result` metric represents the subtraction between the deduced supply and the demand. 
+We will now compare demand vs supply for each health region. the `result` metric represents the subtraction between the deduced supply and the demand.
 
-The `perc` metric represents how much supply is currently available to meet, in percentage terms, the total demand needed in the future (2024). 
+The `perc` metric represents how much supply is currently available to meet, in percentage terms, the total demand needed in the future (2024).
 
 ```{r}
 demanda$ibge <- as.character(demanda$ibge)
@@ -331,7 +332,6 @@ DT::datatable(demanda_oferta)
 
 ```
 
-
 ## Map of health regions
 
 We will now ilustrate the results, in terms of percentage, using a map.
@@ -341,7 +341,6 @@ We will now ilustrate the results, in terms of percentage, using a map.
 spdf <- geojson_read("shape file regioes saude.json",  what = "sp")
 
 ```
-
 
 ```{r}
 #| warning: false
@@ -373,11 +372,9 @@ spdf_fortified |>
 
 ```
 
+# Sensitivy Analysis
 
-
-# Sensitivy Analysis 
-
-## Função para cálculo de cenários 
+## Função para cálculo de cenários
 
 ```{r}
 
@@ -458,7 +455,7 @@ funcao_demanda_oferta <- function(tempo1, tempo2, perc_direto1, perc_direto2) {
 
 ```
 
-## 1 - Baseline scenario 
+## 1 - Baseline scenario
 
 ```{r}
 
@@ -504,7 +501,6 @@ cenario_2_go
 
 ## 3 - Scenario 3 - Increase of Direct Activities
 
-
 ```{r}
 
 cenario_3 <- funcao_demanda_oferta(0.66, 1.26, 0.40, 0.49) |>  
@@ -530,7 +526,6 @@ cenario_3_go
 
 ## 4 - Scenario 4 - Increase of Direct Activities
 
-
 ```{r}
 
 cenario_4 <- funcao_demanda_oferta(0.50, 1.00, 0.50, 0.59) |>  
@@ -542,8 +537,6 @@ cenario_4 <- funcao_demanda_oferta(0.50, 1.00, 0.50, 0.59) |>
 DT::datatable(cenario_4)
 
 ```
-
-
 
 ```{r}
 cenario_4_go <- 
@@ -570,8 +563,6 @@ DT::datatable(cenario_5)
 
 ```
 
-
-
 ```{r}
 cenario_5_go <- 
   cenario_5 |> 
@@ -583,7 +574,48 @@ cenario_5_go
 
 ```
 
-## Juntando tudo 
+### Mapa do cenário 5
+
+We will now ilustrate the results, in terms of percentage, using a map.
+
+```{r}
+
+spdf <- geojson_read("shape file regioes saude.json",  what = "sp")
+
+```
+
+```{r}
+#| warning: false
+
+cenario_5$id <- as.integer(cenario_5$id)
+
+spdf_region <- spdf[ spdf@data$est_id == "52" , ]
+
+
+spdf_fortified <- sf::st_as_sf(spdf_region)
+
+x <- spdf_fortified |>
+  left_join(cenario_5, by = c("reg_id"="id")) |>
+  mutate(categoria = if_else(categoria == "Médico","Physician","Nurse")) |> 
+  ggplot() +
+  geom_sf(aes(fill = percentage)) +
+  geom_sf_text(aes(label = regiao_saude), size = 3.5) +
+  theme_minimal() +
+  scale_fill_gradient(low = "#F8766D", high = "#00BA38", n.breaks = 10) +
+  facet_wrap(~categoria, nrow = 1) +
+  theme(
+    axis.line = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  ) + ggtitle("Scenario 5")
+
+x
+```
+
+## Juntando tudo
 
 ```{r}
 cenarios <- rbind(cenario_1_go,
@@ -593,21 +625,29 @@ cenarios <- rbind(cenario_1_go,
                   cenario_5_go)
 
 
-cenarios |> 
+y <- cenarios |> 
   mutate(resultado = round(resultado)) |> 
   ggplot(aes(x = cenario, y = resultado, fill = categoria)) + 
   geom_col(position = "dodge") + 
-  geom_text(aes(label = resultado), vjust = 1, position = position_dodge(width = 1)) + 
-  theme_minimal() + xlab("Scenario") + ylab("Result")
+  geom_text(aes(label = resultado), vjust = 1, position = position_dodge(width = 1)) + theme(legend.position="top") +
+  theme_minimal() + xlab("Scenario") + ylab("Result") + 
+  theme(text = element_text(size = 25))
 
+
+y 
 ```
 
+```{r}
+
+y + x
+
+```
 
 # Complementary materials
 
 ## Mapa da figura 1
 
-Mapa da figura 1 
+Mapa da figura 1
 
 ```{r}
 library(geobr)
@@ -641,8 +681,6 @@ a <- states |>
 
 a
 ```
-
-
 
 ```{r}
 
@@ -690,7 +728,7 @@ previsoes |>
 
 ```
 
-## figura 
+## figura
 
 ```{r}
 options(scipen = 999)
@@ -706,11 +744,6 @@ professional_services |>
 
 ```
 
-
-
-
-
-
 ## Looking for some reasons for discussion
 
 ```{r}
@@ -721,7 +754,6 @@ cobertura <- read_delim("cobertura.csv",
 
 ```
 
-
 ```{r}
 #| warning: false
 
@@ -730,7 +762,6 @@ cobertura_demanda_oferta <-
   select(CO_CIR, NO_REGIAO_SAUDE, PC_COBERTURA_AB, PC_COBERTURA_SF) |> 
   left_join(demanda_oferta, by = c("CO_CIR"="id"))
 ```
-
 
 ```{r}
 #| warning: false
@@ -741,7 +772,6 @@ cobertura_demanda_oferta |>
   geom_label(aes(label = NO_REGIAO_SAUDE)) + theme_minimal()
 ```
 
-
 ```{r}
 #| warning: false
 
@@ -750,6 +780,7 @@ cobertura_demanda_oferta |>
   ggplot(aes(PC_COBERTURA_AB, percentage)) + geom_smooth(method = 'lm', se = FALSE) +
   geom_label(aes(label = NO_REGIAO_SAUDE)) + theme_minimal() 
 ```
+
 ##Human Development Index
 
 ```{r}
@@ -780,4 +811,3 @@ demanda_oferta |>
 
 
 ```
-
