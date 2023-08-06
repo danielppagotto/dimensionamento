@@ -3,8 +3,9 @@ library(lubridate)
 library(modeltime) 
 library(tidymodels)
 library(timetk)
+library(readxl)
 
-setwd("~/GitHub/prophet_gestantes/bases") 
+setwd("~/GitHub/dimensionamento/05_Gestantes/05_python/analises HRH/Previsoes_sem_MLP")
 
 municipio_regiao <- read_csv("https://raw.githubusercontent.com/danielppagotto/prophet_gestantes/main/bases/municipio_regiao.csv", 
                              col_types = cols(CO_MUNICIP = col_character(), 
@@ -12,7 +13,8 @@ municipio_regiao <- read_csv("https://raw.githubusercontent.com/danielppagotto/p
                     janitor::clean_names()
 
 nascimentos <- read_csv("https://raw.githubusercontent.com/danielppagotto/prophet_gestantes/main/bases/nascimentos.csv") %>% 
-               select(-`...1`) %>% janitor::clean_names()
+               select(-`...1`) %>% 
+               janitor::clean_names()
 
 nascimentos$dtnasc <- dmy(nascimentos$dtnasc)
 
@@ -21,18 +23,21 @@ regioes_nomes <- read_csv("https://raw.githubusercontent.com/danielppagotto/prop
                  janitor::clean_names() %>% 
                  select(co_regsaud, ds_nomepad)
 
+hierarquia_municipios <- read_excel("hierarquia_municipios.xlsx")
 
-municipios_macrorregiao_saude <- read_csv("municipios_macrorregiao_saude.csv")
+# municipios_macrorregiao_saude <- read_csv("municipios_macrorregiao_saude.csv")
 
 # nascimentos$mes_ano <- zoo::as.yearmon(nascimentos$dtnasc, "%Y %m")
+
 nascimentos$mes_ano <- as.Date(format(nascimentos$dtnasc, "%Y-%m"))
 
 nascimentos <- nascimentos %>% 
-                  mutate(regiao = as.integer(str_sub(codmunres, end = 6)))
+                  mutate(regiao = as.integer(str_sub(codmunres, 
+                                                     end = 6)))
 
 nascimentos_go <- nascimentos %>% 
                     filter(dtnasc < "2021-10-01") %>%
-                    left_join(municipios_macrorregiao_saude, by = c("regiao"="cod_municipio")) %>% 
+                    left_join(hierarquia_municipios, by = c("regiao"="cod_municipio")) %>% 
                     group_by(regiao, macrorregiao, dtnasc) %>%
                     summarise(total = sum(contagem)) %>% 
                     filter(macrorregiao != "NA")

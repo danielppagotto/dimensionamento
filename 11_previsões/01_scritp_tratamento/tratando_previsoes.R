@@ -23,5 +23,5 @@ previsoes_go <-
   previsoes_tratado %>% 
   filter(Estado == "GO")
 
-writexl::write_xlsx(previsoes_go, "previsoes_go.xlsx")
+#writexl::write_xlsx(previsoes_go, "previsoes_go.xlsx")
 

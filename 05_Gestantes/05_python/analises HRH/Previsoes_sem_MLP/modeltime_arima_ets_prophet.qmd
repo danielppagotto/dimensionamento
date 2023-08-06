@@ -1,0 +1,187 @@
+---
+title: "previsoes_nascidos"
+format: html
+editor: visual
+---
+
+# Importing R packages
+
+```{r}
+#|wwarning: false
+
+library(RODBC)
+library(tidyverse)
+library(modeltime)
+```
+
+
+# Prediction of live births using 
+
+Importing data of SINASC and filtering only Goias Health Regions. 
+
+```{r}
+
+dremio_host <- Sys.getenv("endereco")
+dremio_port <- Sys.getenv("port")
+dremio_uid <- Sys.getenv("uid")
+dremio_pwd <- Sys.getenv("datalake")
+
+channel <- odbcDriverConnect(
+              sprintf("DRIVER=Dremio Connector;
+                      HOST=%s;
+                      PORT=%s;
+                      UID=%s;
+                      PWD=%s;
+                      AUTHENTICATIONTYPE=Basic Authentication;CONNECTIONTYPE=Direct", 
+                      dremio_host, dremio_port, dremio_uid, dremio_pwd))
+
+consulta <- 'SELECT * FROM "Analytics Layer"."Epidemiológico"."Nascidos Vivos por Região de Saúde"'
+
+sinasc <- sqlQuery(channel, 
+                   consulta, 
+                   as.is = TRUE) |> 
+              filter(uf_sigla == 'GO') |> 
+              filter(ano < 2022) |> 
+              mutate(mes_ano = paste(ano, mes, sep = "-")) |> 
+              mutate(ano_mes = lubridate::ym(mes_ano)) |> 
+              select(-mes_ano)
+
+
+DT::datatable(sinasc)
+
+```
+## Região Central 
+
+```{r}
+nascimentos_go_regiao_central <- sinasc |> 
+  filter(regiao_saude == "Central") 
+
+splits_regiao_central <- time_series_split(
+  nascimentos_go_regiao_central,
+  assess = "36 months",
+  cumulative = TRUE
+)
+
+splits_regiao_central |> 
+  tk_time_series_cv_plan() |> 
+  plot_time_series_cv_plan(ano_mes, 
+                           quantidade)
+
+```
+
+```{r}
+splits_regiao_central
+```
+
+```{r}
+
+model_arima_regiao_central <- 
+  arima_reg() |> 
+  set_engine("auto_arima") |> 
+  fit(quantidade ~ ano_mes, 
+      training(splits_regiao_central))
+
+model_prophet_regiao_central <- prophet_reg(seasonality_yearly = TRUE) |>
+  set_engine("prophet") |> 
+  fit(quantidade ~ ano_mes, training(splits_regiao_central))
+
+model_fit_ets_regiao_central <- exp_smoothing() |>
+  set_engine(engine = "ets") |>
+  fit(quantidade ~ ano_mes, data = training(splits_regiao_central))
+
+model_tbl_regiao_central <- modeltime_table(
+  model_arima_regiao_central,
+  model_prophet_regiao_central,
+  model_fit_ets_regiao_central
+)
+
+# ----------------------------------------------------------------------------------
+
+calib_tbl_regiao_central <- model_tbl_regiao_central |> 
+  modeltime_calibrate(testing(splits_regiao_central))
+
+calib_tbl_regiao_central |> modeltime_accuracy()
+```
+
+
+
+#----------------------------------------------------------------------------------
+model_arima_regiao_central <- arima_reg() |> 
+  set_engine("auto_arima") |> 
+  fit(total ~ dtnasc, training(splits_regiao_central))
+
+model_prophet_regiao_central <- prophet_reg(seasonality_yearly = TRUE) |>
+  set_engine("prophet") |> 
+  fit(total ~ dtnasc, training(splits_regiao_central))
+
+model_fit_ets_regiao_central <- exp_smoothing() |>
+  set_engine(engine = "ets") |>
+  fit(total ~ dtnasc, data = training(splits_regiao_central))
+
+model_tbl_regiao_central <- modeltime_table(
+  model_arima_regiao_central,
+  model_prophet_regiao_central,
+  model_fit_ets_regiao_central
+)
+
+# ----------------------------------------------------------------------------------
+
+calib_tbl_regiao_central <- model_tbl_regiao_central |> 
+  modeltime_calibrate(testing(splits_regiao_central))
+
+calib_tbl_regiao_central |> modeltime_accuracy()
+
+prophet_treino_regiao_central <- calib_tbl_regiao_central[[5]][[2]]
+
+prophet_treino_regiao_central |> 
+  ggplot(aes(x = dtnasc)) + geom_line(aes(y = .actual), col = "blue") +
+  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+
+# ----------------------------------------------------------------------------------
+
+calib_tbl_regiao_central |> 
+  modeltime_forecast(
+    new_data = testing(splits_regiao_central),
+    actual_data = nascimentos_go_regiao_central
+  ) |> 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+future_forecast_tbl_regiao_central <- calib_tbl_regiao_central |> 
+  modeltime_refit(nascimentos_go_regiao_central) |> 
+  modeltime_forecast(h = "42 months",
+                     actual_data = nascimentos_go_regiao_central)
+
+future_forecast_tbl_regiao_central |> 
+  plot_modeltime_forecast(.conf_interval_show = FALSE)
+
+
+future_forecast_tbl_regiao_central |> 
+  filter(.model_desc == "PROPHET" | .model_desc == "ACTUAL") |> 
+  filter(.index > "2019-01-01") |> 
+  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
+  theme_minimal()
+
+# ----------------------------------------------------------------------------------
+
+total_nascimentos_previsao_regiao_central <- 
+  future_forecast_tbl_regiao_central |> 
+  filter(.key == "prediction" & .model_desc == "PROPHET") |> 
+  mutate(mes_ano = format(.index, "%Y-%m")) |> 
+  mutate(ano = year(.index)) |> 
+  group_by(mes_ano, ano) |> 
+  summarise(total = sum(.value)) |> 
+  mutate(tipo = "previs?o")
+
+
+total_nascimentos_atual_recente_regiao_central <- 
+  future_forecast_tbl_regiao_central |> 
+  filter(.index > "2015-01-01") |> 
+  filter(.key == "actual") |> 
+  mutate(mes_ano = format(.index, "%Y-%m")) |> 
+  mutate(ano = year(.index)) |> 
+  group_by(mes_ano, ano) |> 
+  summarise(total = sum(.value)) |> 
+  mutate(tipo = "atual") |> 
+  mutate(regiao = "central")
+
