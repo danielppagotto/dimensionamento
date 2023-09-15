@@ -1,12 +1,43 @@
 ---
 title: "Needs-based health workforce planning for pregnancy care in Brazil"
-format: html
+format: 
+  html:
+    toc: true
 editor: visual
 ---
 
+# Introduction
+
+This supplementary material describes the methodological procedures, as well as documents the codes, based on R language, used for the analysis.
+
+We adapted Asamani et al. (2021) orientations in order build a needs-based health workforce planning for Brazilian context.
+
+Asamani et al. (2021) suggest a set of six consideration that researchers should follow when developing needs based workforce planning, which are:
+
+1.  **Defining the scope** - defining jurisdictional coverage, health system objective and timeframe.
+
+2.  **Analysis of the population health service needs** - population demography, health status, level of service
+
+3.  **Translating the evidence-based service requirement into health workforce requirement** - matching health services with competent professionals, eliciting measures of productivity
+
+4.  **Exploring resource implications** - comparing demand and supply, cost implications)
+
+5.  **Conducting sensitivity analysis** - perform simulation according to parameter uncertainty or policy scenarios
+
+6.  **Conducting model validation** - compare to previous experiences and stakeholder consultation
+
+The following flowchart presents the main stages.
+
+<iframe src="https://cawemo.com/embed/a6cb74ff-2512-4dd3-8294-67b575267775" style="width:700px;height:500px;border:1px solid #ccc" allowfullscreen>
+
+</iframe>
+
+# Preparing R environment
+
+Before making any progress, we need to load the R libraries that will assist performing our analysis.
+
 ```{r}
 #| warning: false
-#| echo: false
 
 library(tidyverse)
 library(readxl)
@@ -18,7 +49,65 @@ library(patchwork)
 
 ```
 
-# Calculating Demand
+# 1 - Defining Scope
+
+The jurisdictional coverage was health regions of Goias state. Goiás is in the middle-west of Brazil. The objective of analysis was targeted to health workforce planning for pregnant and newborn. We employed forecasts for the following two years using artificial intelligence algorithms. 
+
+The following figure illustrates Goiás state's location.
+
+```{r}
+library(geobr)
+
+dataset <- list_geobr()
+
+states <- read_state(
+  year=2019, 
+  showProgress = FALSE
+  ) 
+
+states <- 
+  states |> 
+  mutate(marcar = factor(if_else(abbrev_state == "GO", "1","2")))
+
+# Remove plot axis
+no_axis <- theme(axis.title=element_blank(),
+                 axis.text=element_blank(),
+                 axis.ticks=element_blank())
+
+# Plot all Brazilian states
+
+cores = c("lightblue","lightgray")
+
+a <- states |> 
+      ggplot() +
+        geom_sf(aes(fill=marcar), color="#2D3E50", size=.15, show.legend = FALSE) +
+        theme_minimal() +
+        scale_fill_manual(values = cores) +
+        no_axis
+
+a
+```
+
+The following figure illustrates Goiás state's location.
+
+
+# 2 - Analysis of population health service needs
+
+Each pregnant will require a set of services during pregnancy and after delivery according to recommendation of Brazilian Minister of Health. The same happens for the baby as soon as it is born. 
+
+$$
+NHS\underset{r,t}{} = (P\underset{r,t}{} \times \sum_{t = 0}^{10}S\underset{y,t}{} + B\underset{r,t}{} \times \sum_{t=9}^{33}S\underset{y,t}{}) \times SD\underset{r,t}{}
+$$
+
+where:
+  
+  * $NHS\underset{t}{}$ represents the total programmatic services needed adress each pregnant (P) and Baby (B) of a given health region *r* in a given time *t*. The index for pregnants goes from 0 to 10 because each month has programmatic services dedicated to this public. The same happens for the baby, starting from the month it is born.  
+  * *S* represents the number of services of type *y* required for each pregnant or baby in given time *t* before and after the child birth. The total number of programatic services is listed on appendix A. 
+  * *SD* represents a percentage of population which dependent of Brazilian Health Unified System (Sistema Único de Saúde - SUS) in a given health region *r* and *t*
+
+# 3 - Translating the evidence-based service requirements into health workkforce requirement
+
+
 
 ## Target Population
 
@@ -645,42 +734,7 @@ y + x
 
 # Complementary materials
 
-## Mapa da figura 1
 
-Mapa da figura 1
-
-```{r}
-library(geobr)
-
-dataset <- list_geobr()
-
-states <- read_state(
-  year=2019, 
-  showProgress = FALSE
-  ) 
-
-states <- 
-  states |> 
-  mutate(marcar = factor(if_else(abbrev_state == "GO", "1","2")))
-
-# Remove plot axis
-no_axis <- theme(axis.title=element_blank(),
-                 axis.text=element_blank(),
-                 axis.ticks=element_blank())
-
-# Plot all Brazilian states
-
-cores = c("lightblue","lightgray")
-
-a <- states |> 
-      ggplot() +
-        geom_sf(aes(fill=marcar), color="#2D3E50", size=.15, show.legend = FALSE) +
-        theme_minimal() +
-        scale_fill_manual(values = cores) +
-        no_axis
-
-a
-```
 
 ```{r}
 

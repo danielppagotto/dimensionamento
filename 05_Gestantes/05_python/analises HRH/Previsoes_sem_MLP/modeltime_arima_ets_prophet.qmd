@@ -14,10 +14,9 @@ library(tidyverse)
 library(modeltime)
 ```
 
+# Prediction of live births using
 
-# Prediction of live births using 
-
-Importing data of SINASC and filtering only Goias Health Regions. 
+Importing data of SINASC and filtering only Goias Health Regions.
 
 ```{r}
 
@@ -50,7 +49,8 @@ sinasc <- sqlQuery(channel,
 DT::datatable(sinasc)
 
 ```
-## Região Central 
+
+## Região Central
 
 ```{r}
 nascimentos_go_regiao_central <- sinasc |> 
@@ -103,85 +103,36 @@ calib_tbl_regiao_central <- model_tbl_regiao_central |>
 calib_tbl_regiao_central |> modeltime_accuracy()
 ```
 
+#---------------------------------------------------------------------------------- model_arima_regiao_central \<- arima_reg() \|\> set_engine("auto_arima") \|\> fit(total \~ dtnasc, training(splits_regiao_central))
 
+model_prophet_regiao_central \<- prophet_reg(seasonality_yearly = TRUE) \|\> set_engine("prophet") \|\> fit(total \~ dtnasc, training(splits_regiao_central))
 
-#----------------------------------------------------------------------------------
-model_arima_regiao_central <- arima_reg() |> 
-  set_engine("auto_arima") |> 
-  fit(total ~ dtnasc, training(splits_regiao_central))
+model_fit_ets_regiao_central \<- exp_smoothing() \|\> set_engine(engine = "ets") \|\> fit(total \~ dtnasc, data = training(splits_regiao_central))
 
-model_prophet_regiao_central <- prophet_reg(seasonality_yearly = TRUE) |>
-  set_engine("prophet") |> 
-  fit(total ~ dtnasc, training(splits_regiao_central))
-
-model_fit_ets_regiao_central <- exp_smoothing() |>
-  set_engine(engine = "ets") |>
-  fit(total ~ dtnasc, data = training(splits_regiao_central))
-
-model_tbl_regiao_central <- modeltime_table(
-  model_arima_regiao_central,
-  model_prophet_regiao_central,
-  model_fit_ets_regiao_central
-)
+model_tbl_regiao_central \<- modeltime_table( model_arima_regiao_central, model_prophet_regiao_central, model_fit_ets_regiao_central )
 
 # ----------------------------------------------------------------------------------
 
-calib_tbl_regiao_central <- model_tbl_regiao_central |> 
-  modeltime_calibrate(testing(splits_regiao_central))
+calib_tbl_regiao_central \<- model_tbl_regiao_central \|\> modeltime_calibrate(testing(splits_regiao_central))
 
-calib_tbl_regiao_central |> modeltime_accuracy()
+calib_tbl_regiao_central \|\> modeltime_accuracy()
 
-prophet_treino_regiao_central <- calib_tbl_regiao_central[[5]][[2]]
+prophet_treino_regiao_central \<- calib_tbl_regiao_central\[\[5\]\]\[\[2\]\]
 
-prophet_treino_regiao_central |> 
-  ggplot(aes(x = dtnasc)) + geom_line(aes(y = .actual), col = "blue") +
-  geom_line(aes(y = .prediction), col = "red") + theme_minimal()
+prophet_treino_regiao_central \|\> ggplot(aes(x = dtnasc)) + geom_line(aes(y = .actual), col = "blue") + geom_line(aes(y = .prediction), col = "red") + theme_minimal()
 
 # ----------------------------------------------------------------------------------
 
-calib_tbl_regiao_central |> 
-  modeltime_forecast(
-    new_data = testing(splits_regiao_central),
-    actual_data = nascimentos_go_regiao_central
-  ) |> 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
+calib_tbl_regiao_central \|\> modeltime_forecast( new_data = testing(splits_regiao_central), actual_data = nascimentos_go_regiao_central ) \|\> plot_modeltime_forecast(.conf_interval_show = FALSE)
 
+future_forecast_tbl_regiao_central \<- calib_tbl_regiao_central \|\> modeltime_refit(nascimentos_go_regiao_central) \|\> modeltime_forecast(h = "42 months", actual_data = nascimentos_go_regiao_central)
 
-future_forecast_tbl_regiao_central <- calib_tbl_regiao_central |> 
-  modeltime_refit(nascimentos_go_regiao_central) |> 
-  modeltime_forecast(h = "42 months",
-                     actual_data = nascimentos_go_regiao_central)
+future_forecast_tbl_regiao_central \|\> plot_modeltime_forecast(.conf_interval_show = FALSE)
 
-future_forecast_tbl_regiao_central |> 
-  plot_modeltime_forecast(.conf_interval_show = FALSE)
-
-
-future_forecast_tbl_regiao_central |> 
-  filter(.model_desc == "PROPHET" | .model_desc == "ACTUAL") |> 
-  filter(.index > "2019-01-01") |> 
-  ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() +
-  theme_minimal()
+future_forecast_tbl_regiao_central \|\> filter(.model_desc == "PROPHET" \| .model_desc == "ACTUAL") \|\> filter(.index \> "2019-01-01") \|\> ggplot(aes(x = .index, y = .value, col = .key)) + geom_line() + theme_minimal()
 
 # ----------------------------------------------------------------------------------
 
-total_nascimentos_previsao_regiao_central <- 
-  future_forecast_tbl_regiao_central |> 
-  filter(.key == "prediction" & .model_desc == "PROPHET") |> 
-  mutate(mes_ano = format(.index, "%Y-%m")) |> 
-  mutate(ano = year(.index)) |> 
-  group_by(mes_ano, ano) |> 
-  summarise(total = sum(.value)) |> 
-  mutate(tipo = "previs?o")
+total_nascimentos_previsao_regiao_central \<- future_forecast_tbl_regiao_central \|\> filter(.key == "prediction" & .model_desc == "PROPHET") \|\> mutate(mes_ano = format(.index, "%Y-%m")) \|\> mutate(ano = year(.index)) \|\> group_by(mes_ano, ano) \|\> summarise(total = sum(.value)) \|\> mutate(tipo = "previs?o")
 
-
-total_nascimentos_atual_recente_regiao_central <- 
-  future_forecast_tbl_regiao_central |> 
-  filter(.index > "2015-01-01") |> 
-  filter(.key == "actual") |> 
-  mutate(mes_ano = format(.index, "%Y-%m")) |> 
-  mutate(ano = year(.index)) |> 
-  group_by(mes_ano, ano) |> 
-  summarise(total = sum(.value)) |> 
-  mutate(tipo = "atual") |> 
-  mutate(regiao = "central")
-
+total_nascimentos_atual_recente_regiao_central \<- future_forecast_tbl_regiao_central \|\> filter(.index \> "2015-01-01") \|\> filter(.key == "actual") \|\> mutate(mes_ano = format(.index, "%Y-%m")) \|\> mutate(ano = year(.index)) \|\> group_by(mes_ano, ano) \|\> summarise(total = sum(.value)) \|\> mutate(tipo = "atual") \|\> mutate(regiao = "central")
