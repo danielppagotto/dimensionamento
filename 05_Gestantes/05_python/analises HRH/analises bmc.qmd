@@ -46,17 +46,18 @@ library(broom)
 library(jsonlite)
 library(RODBC)
 library(patchwork)
+library(geobr)
 
 ```
 
 # 1 - Defining Scope
 
-The jurisdictional coverage was health regions of Goias state. Goiás is in the middle-west of Brazil. The objective of analysis was targeted to health workforce planning for pregnant and newborn. We employed forecasts for the following two years using artificial intelligence algorithms. 
+The **jurisdictional coverage** was **health regions of Goias state**. Goiás is in the middle-west of Brazil. The objective of analysis was targeted to **registered** **nurse (RN) and physician** **health workforce planning** for **pregnant** and **newborn** in the **primary healthcare (PMC)**. We employed **demand** **forecasts** for the following **two years** using artificial intelligence algorithms.
 
 The following figure illustrates Goiás state's location.
 
 ```{r}
-library(geobr)
+#| warning: false
 
 dataset <- list_geobr()
 
@@ -88,29 +89,28 @@ a <- states |>
 a
 ```
 
-The following figure illustrates Goiás state's location. Goiás states has five health regions. 
+The following figure illustrates the 18 health regions of Goiás state.
 
+![](images/mapa%20-%20regiões%20de%20saúde.png){fig-align="center" width="800"}
 
 # 2 - Analysis of population health service needs
 
-Each pregnant will require a set of services during pregnancy and after delivery according to recommendation of Brazilian Minister of Health. The same happens for the baby as soon as it is born. 
+Each pregnant will require a set of services during pregnancy and after delivery according to recommendation of Brazilian Minister of Health. The same happens for the baby as soon as it is born.
 
 $$
-NHS\underset{r,t}{} = SD\underset{r,t}{} \times (P\underset{r,t}{} \times \sum_{t = 0}^{10}S\underset{y,t}{} + B\underset{r,t}{} \times \sum_{t=9}^{33}S\underset{y,t}{}) 
-$$
+NHS\underset{r,t}{} = SD\underset{r,t}{} \times (H\underset{r,t}{} \times \sum_{t = -8}^{36}L\underset{y,t}{}) 
+$$ {#eq-1}
 
 where:
-  
-  * $NHS\underset{t}{}$ represents the total programmatic services needed adress each pregnant (P) and Baby (B) of a given health region *r* in a given time *t*. The index for pregnants goes from 0 to 10 because each month has programmatic services dedicated to this public. The same happens for the baby, starting from the month it is born.  
-  * *S* represents the number of services of type *y* required for each pregnant or baby in given time *t* before and after the child birth. The total number of programatic services is listed on appendix A. 
-  * *SD* represents a percentage of population which dependent of Brazilian Health Unified System (Sistema Único de Saúde - SUS) in a given health region *r* and *t*
-  
-  
-## 2.1. Health Status (P and B) and SUS dependent population (SD)
 
-In the following chunk of script
+-   $NHS\underset{t}{}$ represents the total programmatic services needed address each the health status in a health region *r* in a given time *t*.
+-   $SD$ represents a percentage of population which dependent of Brazilian Health Unified System (Sistema Único de Saúde - SUS) in a given health region *r* and *t.*
+-   $H\underset{r,t}{}$ represents the health status - births - for each month *t* and a region *r*.
+-   $L$ represents the number of services of type *y* required for each pregnant or baby in given time *t* before and after the child birth. The index goes from -8 to 36 because each month has programmatic services dedicated to either the pregnant woman (from t = -8 until t = 1). The same happens for the baby, starting from the month it is born t = 0.
 
-This chunk of scripts 
+### 2.1. Health Status (H) and SUS dependent population (SD)
+
+This chunk of scripts shows how the number of monthly births for each health region.
 
 ```{r}
 #| warning: false 
@@ -133,16 +133,33 @@ predictions <-
   mutate(qtd_sus = round(qtd * perc_sus)) |> 
   mutate(data = as.character(data))
 
-DT::datatable(predictions)
+glimpse(predictions)
 
 ```
 
+<br>
 
-## 2.2. Estimating services (S)
+Number of monthly births according to health region.
 
-We will now quantify the number and variety of services need to assist pregnant women and the newborn in the primary health care (PHC) setting.
+```{r}
 
-For each birth we will calculate a number of service needed before and after the event.
+predictions |> 
+  mutate(data = ymd(data)) |> 
+  ggplot(aes(x = data, y = qtd_sus)) + geom_line() + 
+  facet_wrap(~regiao_saude, scales = "free",
+             ncol = 4) + theme_minimal()
+
+```
+
+### 2.2. Estimating services (S)
+
+For each birth we quantified the number and types of procedures needed to assist pregnant women and the newborn in the primary health care (PHC) setting.
+
+There is a technical note - produced for SUS - which describes the type and frequency of procedures women are supposed to get each month before and after child birth.
+
+[![](images/nota.png){fig-align="center" width="300"}](https://www.conass.org.br/biblioteca/saude-da-mulher-na-gestacao-parto-e-puerperio/)
+
+The number and variety of health procedures needed for each pregnant were calculated using an API developed for this project. The API reads the number of births in a given health region (variable `ibge`) according to the variable `qtd_sus` and calculates the number of procedures for previous and subsequent months for pregnant women and newborn.
 
 ```{r include=FALSE}
 #| echo: false
@@ -151,7 +168,7 @@ For each birth we will calculate a number of service needed before and after the
 services <- vroom::vroom("servicos_correto.csv") |> 
                 select(-`...1`) 
 
-DT::datatable(services)
+glimpse(services)
 
 ```
 
@@ -175,6 +192,38 @@ for(i in 1:nrow(predictions)){
 
 ```
 
+This dataframe has 11 variables
+
+```{r}
+colnames(services)
+```
+
+where:
+
+-   ibge: code that identifies each health region
+
+-   data: date of birth
+
+-   qtd: number of births
+
+-   procedimento: name of the procedure of type y
+
+-   mês_procedimento_realizado: month when procedure of type y is programmed to be performed
+
+-   codigo_sigtap: code used by SUS to identify the procedure of type y
+
+-   parametro: the number of procedures of type y is needed according in a given month (mes)
+
+-   mes: programmed month of procedure, which varies from -8 (second month of gestation) to 36 (child consultation in the 36th month of life). Zero represents the month of birth.
+
+-   tipo_procedimento: type of procedure (consultation, vaccine, exam, delivery, educational action)
+
+-   publico: target audienct (mother, newborn, high-risk pregnant woman)
+
+-   nivel_atencao: level of service (primary care, secondary care)
+
+    Since our objective is primary care, we filtered only procedures performed in this level of service.
+
 ```{r}
 #| warning: false
 
@@ -182,56 +231,34 @@ for(i in 1:nrow(predictions)){
 phc_services <- services |> 
                 filter(nivel_atencao == "APS")
 
-DT::datatable(phc_services)
+glimpse(phc_services)
 
 ```
 
+# 3 - Translating the evidence-based service requirements into health workforce requirement
 
-# 3 - Translating the evidence-based service requirements into health workkforce requirement
+According to Asamani e al. (2021), this step includes matching skills and competencies with interventions needed and eliciting workload measures. Asamani et al. (2021) uses concepts from the Workload Indicator of Staffing Needs (WISN).
 
- 
+### 3.1. Matching skills and competencies with interventions needed
 
-
-
-
-
-
-
-
-## Target Population
-
-At first we will access SINASC projections data. These projections were calculated by two co-authors. Multilayer Perceptron (MLP) algorithm registered the best results among other machine learning and statistics technics.
-
-We will deduce the population covered by health insurance.
-
-
-
-## Total services
-
-
-
-## PHC Services and professionals
-
-We will filter only services on the PHC setting.
-
-We then will filter only those performed by registered nurses and physicians. We need to join two dataframes: professionals and procedures.
-
-We will transform the number of procedures in number of hours considering past experiences published. Using time motion techniques Bonfim et al. (2014) registered that nursing appointments took about 25,3 minutes (Brazil average) in the PHC setting. Educative actions took about 73 minutes. We will use these number as reference.
+The `phc_services` dataframe contains the `codigo_sigtap` variable. This variable represents a procedure and will be used to join with a second dataset which identifies the health professional who are able to perform the procedure.
 
 ```{r}
-#| warning: false
-
-# filter just PHC setting
-phc_services <- services |> 
-                filter(nivel_atencao == "APS")
-
 # loading dataframe which combines procedures and the respective professional
 procedures_professional <- read_excel("~/GitHub/dimensionamento/05_Gestantes/05_python/calendario-procedimentos.xlsx", 
     sheet = "procedimentos_profissionais") |> 
                             select(codigo_sigtap, categoria, CBO) |> 
                             mutate(codigo_sigtap = as.numeric(codigo_sigtap)) 
 
-# procedures performed by two cadres will be split equally among them 
+```
+
+Procedures performed by two cadres will be split equally among them. Prenatal consultation, for example, can be performed by either RN or physician, so 50% of the procedure volume will be allocated for both professionals.
+
+Mackenzie et al. (2019) introduces a W parameter in the demand equation to represent the proportion of the services made by a given cadre.
+
+```{r}
+#| warning: false
+
 # the procedure 301010080 is growth and development consultation. It is divided by 10 because the same procedure id is used for all procedure.  
 
 qtt_professional <- 
@@ -244,26 +271,71 @@ qtt_professional <-
 
 # In the following code:
 # 1) filter for only procedures performed by nurses and physicians 
-# 2) calculate the number of procedures exclusive by cadre according to the last
-# code
-# 3) filter only appointments and educative actions
-# 4) filter only those procedures executed in the year of 2024. 
-# 5) create new variable (procedures in hours)
+# 2) calculate the number of procedures exclusive by cadre according to the last code
+
 
 professional_services <- phc_services |> 
                             left_join(qtt_professional, by = "codigo_sigtap") |> 
                             mutate(qtt_cadre = quantidade/n) |> 
                             left_join(procedures_professional, by = "codigo_sigtap") |> 
-                            filter(categoria == "Enfermeiro" | categoria == "Médico") |> 
-                            filter(tipo_procedimento == "Consultas ou Visitas" |
-                                   tipo_procedimento == "Ações Educacionais") |> 
-                            mutate(ano = year(mês_procedimento_realizado)) |> 
-                            filter(ano == 2024) |> 
-                            mutate(tempo = if_else(tipo_procedimento == "Consultas ou Visitas",
-                                                   qtt_cadre * 0.66,
-                                                   qtt_cadre * 1.266))
+                            filter(categoria == "Enfermeiro" | categoria == "Médico") 
 
-DT::datatable(professional_services)
+glimpse(professional_services)
+
+```
+
+The new dataframe contains the variables `qtt_cadre`, `categoria` and `CBO`, where:
+
+-   qtt_cadre: total of procedures must be executed by a professional
+
+-   categoria: health professional that should execute that number of procedures
+
+-   CBO: brazilian code that identifies a health professional
+
+### 3.2. Eliciting workload measures
+
+The next step involves defining the service standard (SS) - the average time, in hours, a trained and motivated health professional spends to perform an intervention of type y. The available working time (AWT) is the total annual time a health worker has available after deducing absences. Once we have both parameters, it is possible to calculate the service workload (SW) which is defined as a "standard workload for health professional of category n when performing service activity y" (Asamani et al., 2021, p. 7).
+
+$$
+SW\underset{n,y}{} = \frac{AWT{n}{}}{SS{y,n}{}}
+$$
+
+We adapted Asamani's equation for our case study but with no loss to the mathematical logic. On appendix A we present each step made for adapting the original formula.
+
+After including both elements, the equation 1 is complemented as below:
+
+$$
+N\underset{n,r,t}{} = \frac{SD\underset{r,t}{} \times (H\underset{r,t}{} \times \sum_{t = -8}^{36}(L\underset{y,t}{} \times SS\underset{y}{}))}{AWT\underset{n,t}{}} 
+$$
+
+where:
+
+-   $N\underset{n,r,t}{}$= Professionals of category n, needed in a given region r and period t.
+
+-   $SD$ represents a percentage of population which dependent of Brazilian Health Unified System (Sistema Único de Saúde - SUS) in a given health region *r* and *t.*
+
+-   $H\underset{r,t}{}$ represents the health status - births - for each month *t* and a region *r*.
+
+-   $L\underset{y,t}{}$ represents the number of services of type *y* required for each pregnant or baby in given time *t* before and after the child birth. The index goes from -8 to 36 because each month has programmatic services dedicated to either the pregnant woman (from t = -8 until t = 1). The same happens for the baby, starting from the month it is born t = 0.
+
+-   $SS\underset{y}{}$ standard time of intervetion, in hours, performed by a trained and motivated professional. We used time collected in past experiences. Using time motion techniques Bonfim et al. (2014) registered that nursing appointments took about 25,3 minutes (Brazil average) in the PHC setting. Educative actions took about 73 minutes. We will use these number as reference. Matsumoto (2017) found similar results in terms of time.
+
+-   $AWT\underset{n,t}{}$ is the available working time after deducting absence. Originally this is a metric measured in years. But we adapted it since our analysis are monthly based.
+
+```{r}
+#| warning: false
+
+demand <- professional_services |> 
+                filter(tipo_procedimento == "Consultas ou Visitas" |
+                       tipo_procedimento == "Ações Educacionais") |> 
+                mutate(ano = year(mês_procedimento_realizado)) |> 
+                filter(ano == 2024) |> 
+                mutate(tempo = if_else(
+                  tipo_procedimento == "Consultas ou Visitas",
+                                        qtt_cadre * 0.66,
+                                        qtt_cadre * 1.266))
+
+glimpse(demand)
 
 ```
 
@@ -274,7 +346,7 @@ We will divide the full time required by procedures by 126 which is the total av
 ```{r}
 #| warning: false
 
-demanda <- professional_services |> 
+prof_demand <- demand |> 
         select(ano, mês_procedimento_realizado, ibge, CBO, categoria, tempo) |> 
         mutate(fte40 = tempo/133) |> 
         group_by(ano, mês_procedimento_realizado, ibge, CBO, categoria) |> 
@@ -282,7 +354,7 @@ demanda <- professional_services |>
                   fte40_demanda = sum(fte40),
                   fte40_demanda = round(fte40_demanda, 2))
 
-DT::datatable(demanda)
+glimpse(prof_demand)
 
 ```
 
@@ -321,7 +393,7 @@ oferta_GO <- vroom::vroom("oferta_go.csv") |> select(-`...1`)
 
 ```
 
-# Calculating Supply
+# 4 - Calculating Supply
 
 ```{r}
 #| warning: false
@@ -337,7 +409,7 @@ channel <- odbcDriverConnect(sprintf("DRIVER=Dremio Connector;HOST=%s;PORT=%s;UI
 consulta <- 'SELECT * FROM "Analytics Layer".Infraestrutura.Profissionais."Profissionais APS"'
 
 oferta_GO <- sqlQuery(channel, consulta, 
-                     as.is = TRUE)
+                      as.is = TRUE)
 
 ```
 
@@ -396,10 +468,10 @@ We will now compare demand vs supply for each health region. the `result` metric
 The `perc` metric represents how much supply is currently available to meet, in percentage terms, the total demand needed in the future (2024).
 
 ```{r}
-demanda$ibge <- as.character(demanda$ibge)
+prof_demand$ibge <- as.character(prof_demand$ibge)
 
 demanda_oferta <- 
-  demanda |>  
+  prof_demand |>  
   left_join(oferta, by = c("ibge"="cod_regsaud",
                            "categoria"="prof",
                            "mês_procedimento_realizado"="ano_mes_corrigido")) |> 
@@ -427,10 +499,10 @@ demanda_oferta |>
 
 ```{r}
 
-demanda$ibge <- as.character(demanda$ibge)
+prof_demand$ibge <- as.character(prof_demand$ibge)
 
 demanda_oferta <- 
-  demanda |>  
+  prof_demand |>  
   left_join(oferta, by = c("ibge"="cod_regsaud",
                            "categoria"="prof",
                            "mês_procedimento_realizado"="ano_mes_corrigido")) |> 
@@ -767,8 +839,6 @@ y + x
 
 # Complementary materials
 
-
-
 ```{r}
 
 b <- spdf_fortified |>
@@ -820,7 +890,7 @@ previsoes |>
 ```{r}
 options(scipen = 999)
 
-professional_services |> 
+demand |> 
   select(procedimento, data, categoria, tempo) |> 
   group_by(procedimento) |> 
   summarise(workload = sum(tempo)) |> 
