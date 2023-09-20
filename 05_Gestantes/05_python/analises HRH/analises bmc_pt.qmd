@@ -6,11 +6,9 @@ format:
 editor: visual
 ---
 
-# Introduction
+# Introdução
 
-This supplementary material describes the methodological procedures, as well as documents the codes, based on R language, used for the analysis.
-
-We adapted Asamani et al. (2021) orientations in order build a needs-based health workforce planning for Brazilian context.
+Este material suplementar descreve os procedimentos metodológicos, assim como a documentação do código em linguagem R, usada para as análises. Foram seguidas as orientações de Asamani et al. (2021) de modo a construir um modelo de planejamento da força de trabalho em saúde para o cenário brasileiro.
 
 Asamani et al. (2021) suggest a set of six consideration that researchers should follow when developing needs based workforce planning, which are:
 
