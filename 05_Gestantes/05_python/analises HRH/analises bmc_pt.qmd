@@ -8,6 +8,11 @@ editor: visual
 
 # Introdução
 
+```{=html}
+<script type="text/javascript" async
+  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+</script>
+```
 Este material suplementar descreve os procedimentos metodológicos, assim como a documentação do código em linguagem R, usada para as análises. Foram seguidas as orientações de Asamani et al. (2021) de modo a construir um modelo de planejamento da força de trabalho em saúde para o cenário brasileiro.
 
 Asamani et al. (2021) sugere um conjunto de seis considerações que pesquisadores devem seguir para desenvolver um planejamento baseado em necessidades de saúde, que são:
@@ -18,7 +23,7 @@ Asamani et al. (2021) sugere um conjunto de seis considerações que pesquisador
 
 3.  **Traduzindo os serviços necessários em força de trabalho** - associando os serviços a categorias profissionais, elicitando medidas de carga de trabalho e produtividade.
 
-4.  **Exploração de implicações em termos de recursos**  - comparando demanda e oferta e explorando implicações em termos de custos.
+4.  **Exploração de implicações em termos de recursos** - comparando demanda e oferta e explorando implicações em termos de custos.
 
 5.  **Condução de análise de sensibilidade** - executar simulações de acordo com incertezas e de parâmetros e mudanças de cenários de políticas.
 
@@ -233,11 +238,11 @@ glimpse(phc_services)
 
 ```
 
-# 3 - Traduzindo as necessidades por serviços em requisitos de força de trabalho 
+# 3 - Traduzindo as necessidades por serviços em requisitos de força de trabalho
 
 De acordo com Asamani et al. (2021), este passo inclui associar habilidades e competências com intervenções necessárias para elicitar as medidas de carga de trabalho, com base no *Workload Indicator of Staffing Needs* (WISN).
 
-### 3.1. Associando habilidades e competências com as intervenções necessárias 
+### 3.1. Associando habilidades e competências com as intervenções necessárias
 
 O dataframe `phc_services` contém a variável `codigo_sigtap`. Esta variável representa um procedimento que irá ser usado para juntar com um segundo dataset que identifica qual profissional de saúde pode executar o procedimento.
 
@@ -293,7 +298,7 @@ O novo dataframe contém a variável `qtt_cadre`, `categoria` e `CBO`, onde:
 
 -   CBO: o código brasileiro de ocupações que identifica uma categoria profissional
 
-### 3.2. Elicitando medidas de carga de trabalho 
+### 3.2. Elicitando medidas de carga de trabalho
 
 O próximo passo envolve a definição do padrão de serviço (*service standard - SS*, em inglês) - tempo médio em horas que um profissional motivado e treinado toma para executar uma intervenção do tipo y. O tempo total disponível (TTD ou AWT, em inglês) é o tempo anual que um trabalhador tem disponível após a dedção de ausências. Uma vez que se tem os dois parâmetros, é possível calcular a carga de trabalho de serviço (*service workload* - SW, em inglês) que é definido como a carga de trabalho padrão exigido por um profissional da categoria n para executar um serviço y" (Asamani et al., 2021, p. 7).
 
@@ -446,7 +451,7 @@ Onde:
 
 -   $A\underset{r,t}{}$: representa a oferta de profissionais atuantes em estabelecimentos de atenção primária, padronizados em FTE. Na base do [Cadastro Nacional de Estabelecimentos de Saúde (CNES-PF)](https://cnes.datasus.gov.br/) cada registro representa um vínculo. Portanto, um mesmo profissional pode aparecer múltiplas vezes. Para superar tal problema, foram somadas as cargas horárias. As cargas horárias estão registradas por padrão semanal enquanto os cálculos da demanda foram feitos para o padrão mensal. Portanto, foi necessário aplicar a oferta para o padrão mensal também. Isso foi feito, multiplicando-se a carga horária semanal por 4,345. Por fim, o valor resultante é dividido por 126h. Para mais detalhes destes procedimentos, acesse o apêndice C.
 
--    $D\underset{n,r,t}{}$: representa o total de carga de trabalho dedicada a atividades diretas (assistência). Foi utilizada uma referência de 30% e 39% para enfermeiros e médicos, respectivamente, a partir de estudos prévios de Bonfim (2014) e Matsumoto (2017), para um cenário baseline. A simulação de cenários é aplicada em seguida.
+-   $D\underset{n,r,t}{}$: representa o total de carga de trabalho dedicada a atividades diretas (assistência). Foi utilizada uma referência de 30% e 39% para enfermeiros e médicos, respectivamente, a partir de estudos prévios de Bonfim (2014) e Matsumoto (2017), para um cenário baseline. A simulação de cenários é aplicada em seguida.
 
 -   $F\underset{n,r,t}{}$: representa o percentual de tempo dedicado em atividades para assistência a gestantes e recém-nascidos.
 
@@ -479,7 +484,7 @@ DT::datatable(oferta)
 
 ```
 
-## 4.2. Comparando demanda e oferta 
+## 4.2. Comparando demanda e oferta
 
 Nós comparamos demanda e oferta para cada região de saúde. A métrica `result` representa a subtração entre oferta e demanda (análise absoluta). A métrica `perc` representa quanto da oferta está disponível atualmente para atender a demanda em termos percentuais (análise relativa). Ambas as métricas são recomendadas por Asamani et al. (2021).
 
@@ -585,7 +590,7 @@ spdf_fortified |>
 
 ```
 
-# 5 - Análise de sensibilidade 
+# 5 - Análise de sensibilidade
 
 Construção de uma função para calcular cenários.
 
@@ -681,7 +686,7 @@ funcao_demanda_oferta <-
 }
 ```
 
-## 1 - Baseline cenário 
+## 1 - Baseline cenário
 
 ```{r}
 #| warning: false
@@ -731,7 +736,7 @@ cenario_2_go
 
 ```
 
-## 3 - Cenário 3 - Aumento de Atividades Diretas 
+## 3 - Cenário 3 - Aumento de Atividades Diretas
 
 Aumento de 20% das atividades diretas
 
