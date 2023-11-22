@@ -51,7 +51,7 @@ library(patchwork)
 
 # 1 - Defining Scope
 
-The jurisdictional coverage was health regions of Goias state. Goiás is in the middle-west of Brazil. The objective of analysis was targeted to health workforce planning for pregnant and newborn. We employed forecasts for the following two years using artificial intelligence algorithms. 
+The jurisdictional coverage was health regions of Goias state. Goiás is in the middle-west of Brazil. The objective of analysis was targeted to health workforce planning for pregnant and newborn. We employed forecasts for the following two years using artificial intelligence algorithms.
 
 The following figure illustrates Goiás state's location.
 
@@ -90,24 +90,21 @@ a
 
 The following figure illustrates Goiás state's location.
 
-
 # 2 - Analysis of population health service needs
 
-Each pregnant will require a set of services during pregnancy and after delivery according to recommendation of Brazilian Minister of Health. The same happens for the baby as soon as it is born. 
+Each pregnant will require a set of services during pregnancy and after delivery according to recommendation of Brazilian Minister of Health. The same happens for the baby as soon as it is born.
 
 $$
 NHS\underset{r,t}{} = (P\underset{r,t}{} \times \sum_{t = 0}^{10}S\underset{y,t}{} + B\underset{r,t}{} \times \sum_{t=9}^{33}S\underset{y,t}{}) \times SD\underset{r,t}{}
 $$
 
 where:
-  
-  * $NHS\underset{t}{}$ represents the total programmatic services needed adress each pregnant (P) and Baby (B) of a given health region *r* in a given time *t*. The index for pregnants goes from 0 to 10 because each month has programmatic services dedicated to this public. The same happens for the baby, starting from the month it is born.  
-  * *S* represents the number of services of type *y* required for each pregnant or baby in given time *t* before and after the child birth. The total number of programatic services is listed on appendix A. 
-  * *SD* represents a percentage of population which dependent of Brazilian Health Unified System (Sistema Único de Saúde - SUS) in a given health region *r* and *t*
+
+-   $NHS\underset{t}{}$ represents the total programmatic services needed adress each pregnant (P) and Baby (B) of a given health region *r* in a given time *t*. The index for pregnants goes from 0 to 10 because each month has programmatic services dedicated to this public. The same happens for the baby, starting from the month it is born.\
+-   *S* represents the number of services of type *y* required for each pregnant or baby in given time *t* before and after the child birth. The total number of programatic services is listed on appendix A.
+-   *SD* represents a percentage of population which dependent of Brazilian Health Unified System (Sistema Único de Saúde - SUS) in a given health region *r* and *t*
 
 # 3 - Translating the evidence-based service requirements into health workkforce requirement
-
-
 
 ## Target Population
 
@@ -733,8 +730,6 @@ y + x
 ```
 
 # Complementary materials
-
-
 
 ```{r}
 

@@ -19,7 +19,7 @@ Asamani et al. (2021) sugere um conjunto de seis considerações que pesquisador
 
 1.  **Definição de escopo** - definição de uma cobertura jurisdicional, objetivo de sistema de saúde e horizonte temporal.
 
-2.  **Análise da necessidade por servios e saúde** - demografia populacional, status de saúde, programação de serviços.
+2.  **Análise da necessidade por serviços de saúde** - demografia populacional, status de saúde, programação de serviços.
 
 3.  **Traduzindo os serviços necessários em força de trabalho** - associando os serviços a categorias profissionais, elicitando medidas de carga de trabalho e produtividade.
 
@@ -154,7 +154,7 @@ predictions |>
 
 ```
 
-### 2.2. Estimando serviços (S)
+### 2.2. Estimando serviços (L)
 
 Para cada nascido, foi quantificado o número e tipo de serviços necessários para assistir gestantes e recém-nascidos no contexto da atenção primária.
 
