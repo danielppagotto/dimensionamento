@@ -22,7 +22,8 @@ cadastro_pop_sisab <- read_excel("~/GitHub/dimensionamento/08_APS/bases/cadastro
 cadastro_pop_sisab$CNES <- as.integer(cadastro_pop_sisab$CNES)
 
 # extração da população vulnerável enviada pela SAPS
-pop_vulneravel_previne_202212 <- read_excel("~/GitHub/dimensionamento/08_APS/bases/pop_vulneravel_previne_202212.xlsx")
+pop_vulneravel_previne_202212 <- 
+  read_excel("~/GitHub/dimensionamento/08_APS/bases/pop_vulneravel_previne_202212.xlsx")
 
 pop_vulneravel_previne_202212$CO_CNES <- as.integer(pop_vulneravel_previne_202212$CO_CNES)
 
@@ -41,8 +42,10 @@ sisab <- cadastro_pop_sisab |>
                    pop_vinc, qt_bnf_auxilio_brasil) |> 
             mutate(pop_vinc = as.numeric(pop_vinc)) |> 
             mutate(perc_benef_pbf = qt_bnf_auxilio_brasil/pop_vinc,
-                   perc_benef_pbf = round(perc_benef_pbf, 2))
+                   perc_benef_pbf = round(perc_benef_pbf, 2)) |> 
+            rename(bnf_pbf = qt_bnf_auxilio_brasil)
 
+DT::datatable(sisab)
 ```
 
 Descrição das variáveis

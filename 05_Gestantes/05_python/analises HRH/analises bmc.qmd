@@ -10,9 +10,9 @@ editor: visual
 
 This supplementary material describes the methodological procedures, as well as documents the codes, based on R language, used for the analysis.
 
-We adapted Asamani et al. (2021) orientations in order build a needs-based health workforce planning for Brazilian context.
+We adapted Asamani et al. (2021) orientations in order to build a needs-based health workforce (NBHW) planning for Brazilian context.
 
-Asamani et al. (2021) suggest a set of six consideration that researchers should follow when developing needs based workforce planning, which are:
+Asamani et al. (2021) suggest a set of six steps that researchers should follow when developing NBHW planning, which are:
 
 1.  **Defining the scope** - defining jurisdictional coverage, health system objective and timeframe.
 
